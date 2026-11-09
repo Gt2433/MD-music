@@ -663,6 +663,8 @@ class LanguageService {
       'cancel_download': 'إلغاء التنزيل',
       'open_installer': 'فتح مثبت التحديث',
       'update_downloaded_in': 'تم تنزيل التحديث في: {path}',
+      'allow_install_unknown_sources': 'يرجى تفعيل خيار "السماح بتثبيت التطبيقات من هذا المصدر" ثم إعادة الضغط على تثبيت.',
+      'redownload_update': 'إعادة تنزيل التحديث',
       'choose_album': 'اختر الألبوم',
     },
 
@@ -1230,6 +1232,8 @@ class LanguageService {
       'cancel_download': 'Cancel Download',
       'open_installer': 'Open Installer',
       'update_downloaded_in': 'Update downloaded to: {path}',
+      'allow_install_unknown_sources': 'Please enable "Allow from this source" in settings, then tap Install.',
+      'redownload_update': 'Re-download update',
       'choose_album': 'Select Album',
     },
 
@@ -1797,6 +1801,8 @@ class LanguageService {
       'cancel_download': 'Annuler le téléchargement',
       'open_installer': 'Ouvrir l\'installateur',
       'update_downloaded_in': 'Mise à jour téléchargée dans : {path}',
+      'allow_install_unknown_sources': 'Veuillez activer « Autoriser cette source » dans les paramètres, puis appuyez sur Installer.',
+      'redownload_update': 'Retélécharger la mise à jour',
       'choose_album': 'Choisir un album',
     },
   };

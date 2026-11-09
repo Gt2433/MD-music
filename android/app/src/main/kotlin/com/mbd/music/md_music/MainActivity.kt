@@ -22,6 +22,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 import android.content.pm.PackageManager
+import androidx.core.content.FileProvider
 import android.media.audiofx.Equalizer
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Virtualizer
@@ -247,7 +248,7 @@ class MainActivity : AudioServiceActivity() {
                 "getPackageInfo" -> {
                     try {
                         val pInfo = packageManager.getPackageInfo(packageName, 0)
-                        val vName = pInfo.versionName ?: "1.1.0"
+                        val vName = pInfo.versionName ?: "2.0.0"
                         val vCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                             pInfo.longVersionCode
                         } else {
@@ -260,7 +261,15 @@ class MainActivity : AudioServiceActivity() {
                             "packageName" to packageName
                         ))
                     } catch (e: Exception) {
-                        result.success(mapOf("versionName" to "1.1.0", "versionCode" to 2L, "packageName" to packageName))
+                        result.success(mapOf("versionName" to "2.0.0", "versionCode" to 3L, "packageName" to packageName))
+                    }
+                }
+                "installApk" -> {
+                    val path = call.argument<String>("path")
+                    if (path != null) {
+                        installApk(path, result)
+                    } else {
+                        result.error("INVALID_PATH", "Path cannot be null", null)
                     }
                 }
                 "attachEqualizer" -> {
@@ -1029,6 +1038,47 @@ class MainActivity : AudioServiceActivity() {
             result.success(true)
         } else {
             result.success(false)
+        }
+    }
+
+    private fun installApk(filePath: String, result: MethodChannel.Result) {
+        val file = File(filePath)
+        if (!file.exists() || file.length() == 0L) {
+            result.error("FILE_NOT_FOUND", "APK file does not exist or is empty", null)
+            return
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!packageManager.canRequestPackageInstalls()) {
+                    val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:$packageName")
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    startActivity(settingsIntent)
+                    result.success("PERMISSION_REQUIRED")
+                    return
+                }
+            }
+
+            val uri: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                FileProvider.getUriForFile(
+                    this,
+                    "$packageName.fileprovider",
+                    file
+                )
+            } else {
+                Uri.fromFile(file)
+            }
+
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            startActivity(installIntent)
+            result.success("SUCCESS")
+        } catch (e: Exception) {
+            result.error("INSTALL_ERROR", e.message, null)
         }
     }
 

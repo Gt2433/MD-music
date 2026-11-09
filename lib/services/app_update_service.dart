@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -198,7 +199,14 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
   int _receivedBytes = 0;
   int _totalBytes = 0;
   String _errorMessage = '';
+  String? _downloadedApkPath;
   CancelToken? _cancelToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkExistingDownload();
+  }
 
   @override
   void dispose() {
@@ -206,7 +214,41 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
     super.dispose();
   }
 
-  Future<void> _startDownloadAndInstall() async {
+  Future<String> _resolveSavePath() async {
+    try {
+      final extDirs = await getExternalCacheDirectories();
+      if (extDirs != null && extDirs.isNotEmpty) {
+        return '${extDirs.first.path}/${widget.release.apkFileName}';
+      }
+      final extDir = await getExternalStorageDirectory();
+      if (extDir != null) {
+        return '${extDir.path}/${widget.release.apkFileName}';
+      }
+    } catch (_) {}
+    final tempDir = await getTemporaryDirectory();
+    return '${tempDir.path}/${widget.release.apkFileName}';
+  }
+
+  Future<void> _checkExistingDownload() async {
+    try {
+      final path = await _resolveSavePath();
+      final file = File(path);
+      if (await file.exists()) {
+        final length = await file.length();
+        if (length > 10 * 1024 * 1024) {
+          if (mounted) {
+            setState(() {
+              _downloadedApkPath = path;
+              _state = _DownloadState.completed;
+              _progress = 1.0;
+            });
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _startDownload() async {
     setState(() {
       _state = _DownloadState.downloading;
       _progress = 0.0;
@@ -214,8 +256,7 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
     });
 
     try {
-      final tempDir = await getTemporaryDirectory();
-      final savePath = '${tempDir.path}/${widget.release.apkFileName}';
+      final savePath = await _resolveSavePath();
       final file = File(savePath);
       if (await file.exists()) {
         try {
@@ -243,28 +284,13 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
 
       if (mounted) {
         setState(() {
+          _downloadedApkPath = savePath;
           _state = _DownloadState.completed;
           _progress = 1.0;
         });
 
-        // Trigger Android package installer
-        final openResult = await OpenFilex.open(
-          savePath,
-          type: 'application/vnd.android.package-archive',
-        );
-
-        if (openResult.type != ResultType.done && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                LanguageService()
-                    .t('update_downloaded_in')
-                    .replaceAll('{path}', savePath),
-              ),
-              backgroundColor: AppTheme.surface,
-            ),
-          );
-        }
+        // Trigger installer immediately upon download completion
+        await _installApk();
       }
     } catch (e) {
       if (CancelToken.isCancel(e as dynamic)) return;
@@ -275,6 +301,64 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
         });
       }
     }
+  }
+
+  Future<void> _installApk() async {
+    final path = _downloadedApkPath;
+    if (path == null) {
+      await _startDownload();
+      return;
+    }
+
+    final file = File(path);
+    if (!await file.exists() || await file.length() == 0) {
+      await _startDownload();
+      return;
+    }
+
+    // 1. Native Android installer via MethodChannel
+    try {
+      const channel = MethodChannel('com.mbd.music/artwork');
+      final result = await channel.invokeMethod<String>('installApk', {'path': path});
+
+      if (result == 'PERMISSION_REQUIRED') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(LanguageService().t('allow_install_unknown_sources')),
+              duration: const Duration(seconds: 5),
+              backgroundColor: AppTheme.surface,
+            ),
+          );
+        }
+        return;
+      }
+
+      if (result == 'SUCCESS') {
+        return;
+      }
+    } catch (_) {}
+
+    // 2. Fallback via OpenFilex
+    try {
+      final openResult = await OpenFilex.open(
+        path,
+        type: 'application/vnd.android.package-archive',
+      );
+
+      if (openResult.type != ResultType.done && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              LanguageService()
+                  .t('update_downloaded_in')
+                  .replaceAll('{path}', path),
+            ),
+            backgroundColor: AppTheme.surface,
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   @override
@@ -485,7 +569,7 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                onPressed: _startDownloadAndInstall,
+                onPressed: _startDownload,
                 icon: const Icon(Icons.cloud_download_rounded, size: 20),
                 label: Text(
                   LanguageService().t('download_install_now'),
@@ -529,25 +613,44 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
                 ),
               ),
             ] else if (_state == _DownloadState.completed) ...[
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: accentColor,
-                  foregroundColor: Colors.black,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accentColor,
+                        foregroundColor: Colors.black,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: _installApk,
+                      icon: const Icon(Icons.check_circle_rounded, size: 20),
+                      label: Text(
+                        LanguageService().t('open_installer'),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                onPressed: _startDownloadAndInstall,
-                icon: const Icon(Icons.check_circle_rounded, size: 20),
-                label: Text(
-                  LanguageService().t('open_installer'),
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.cardColor,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.cardBorder, width: 1),
+                    ),
+                    child: IconButton(
+                      tooltip: LanguageService().t('redownload_update'),
+                      icon: Icon(Icons.refresh_rounded, color: AppTheme.textSecondary),
+                      onPressed: _startDownload,
+                    ),
                   ),
-                ),
+                ],
               ),
             ],
           ],
