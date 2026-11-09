@@ -20,8 +20,17 @@ class AudioEffectItem {
     required this.icon,
   });
 
-  String get title => LanguageService().isArabic ? titleAr : titleEn;
-  String get description => LanguageService().isArabic ? descAr : descEn;
+  String get title {
+    if (id == AudioEffectsService.effectNone) return LanguageService().t('effect_none_title');
+    if (id == AudioEffectsService.effectDeepEcho) return LanguageService().t('effect_reverb_title');
+    return LanguageService().isArabic ? titleAr : titleEn;
+  }
+
+  String get description {
+    if (id == AudioEffectsService.effectNone) return LanguageService().t('effect_none_desc');
+    if (id == AudioEffectsService.effectDeepEcho) return LanguageService().t('effect_reverb_desc');
+    return LanguageService().isArabic ? descAr : descEn;
+  }
 }
 
 class AudioEffectsService extends ChangeNotifier {

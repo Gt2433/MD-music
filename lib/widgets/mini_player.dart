@@ -14,7 +14,7 @@ class MiniPlayer extends StatelessWidget {
     final audio = AudioService();
 
     return AnimatedBuilder(
-      animation: audio,
+      animation: Listenable.merge([audio, AppTheme.artworkShapeNotifier]),
       builder: (context, _) {
         final song = audio.currentSong;
         if (song == null) {
@@ -22,6 +22,8 @@ class MiniPlayer extends StatelessWidget {
         }
 
         final isPlaying = audio.player.playing;
+        final isCircleArt = AppTheme.artworkShapeNotifier.value == 'circle';
+        final miniArtRadius = isCircleArt ? 26.0 : 14.0;
 
         return Directionality(
           textDirection: Directionality.of(context),
@@ -84,13 +86,16 @@ class MiniPlayer extends StatelessWidget {
                                 final pos = snapshot.data?.inMilliseconds ?? 0;
                                 final total = audio.player.duration?.inMilliseconds ?? (song.duration ?? 1);
                                 final progress = total > 0 ? (pos / total).clamp(0.0, 1.0) : 0.0;
-                                return ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-                                  child: LinearProgressIndicator(
-                                    value: progress,
-                                    backgroundColor: (AppTheme.isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
-                                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accentColor),
-                                    minHeight: 2.5,
+                                return Directionality(
+                                  textDirection: TextDirection.ltr,
+                                  child: ClipRRect(
+                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+                                    child: LinearProgressIndicator(
+                                      value: progress,
+                                      backgroundColor: (AppTheme.isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
+                                      valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accentColor),
+                                      minHeight: 2.5,
+                                    ),
                                   ),
                                 );
                               },
@@ -102,11 +107,11 @@ class MiniPlayer extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(horizontal: 14),
                             child: Row(
                               children: [
-                                // Cover art (Enlarged modern squircle)
+                                // Cover art (Enlarged modern squircle or circle)
                                 QueryArtworkOrFallback(
                                   id: song.id,
                                   size: 52,
-                                  borderRadius: 14,
+                                  borderRadius: miniArtRadius,
                                 ),
                                 const SizedBox(width: 12),
 

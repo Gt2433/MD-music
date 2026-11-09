@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:path_provider/path_provider.dart';
 import 'audio_service.dart';
+import 'artwork_color_extractor.dart';
 import 'language_service.dart';
 
 class SongEditInfo {
@@ -188,6 +189,7 @@ class SongEditService extends ChangeNotifier {
     required String newTitle,
     required String newArtist,
     String? newArtworkPath,
+    bool clearCustomArtwork = false,
     int startMs = 0,
     int endMs = 0,
     bool applyTrim = false,
@@ -203,13 +205,23 @@ class SongEditService extends ChangeNotifier {
       info.title = newTitle.trim().isNotEmpty ? newTitle.trim() : song.title;
       info.artist = newArtist.trim().isNotEmpty ? newArtist.trim() : (song.artist ?? '');
 
-      if (newArtworkPath != null && newArtworkPath.isNotEmpty) {
+      if (clearCustomArtwork) {
+        if (info.customArtPath != null && File(info.customArtPath!).existsSync()) {
+          try {
+            await File(info.customArtPath!).delete();
+          } catch (_) {}
+        }
+        info.customArtPath = null;
+        AudioService().updateArtworkCache(song.id, null);
+        ArtworkColorExtractor.clearCache(song.id);
+      } else if (newArtworkPath != null && newArtworkPath.isNotEmpty) {
         info.customArtPath = newArtworkPath;
         try {
           final artFile = File(newArtworkPath);
           if (await artFile.exists()) {
             final bytes = await artFile.readAsBytes();
             AudioService().updateArtworkCache(song.id, bytes);
+            ArtworkColorExtractor.clearCache(song.id);
           }
         } catch (_) {}
       }
@@ -260,6 +272,12 @@ class SongEditService extends ChangeNotifier {
     try {
       final info = _edits[song.id];
       if (info != null) {
+        // Delete custom artwork if exists
+        if (info.customArtPath != null && File(info.customArtPath!).existsSync()) {
+          try {
+            await File(info.customArtPath!).delete();
+          } catch (_) {}
+        }
         // Restore original audio file if backup exists
         if (info.originalBackupPath != null) {
           final backupFile = File(info.originalBackupPath!);
@@ -269,6 +287,7 @@ class SongEditService extends ChangeNotifier {
         }
         _edits.remove(song.id);
         AudioService().updateArtworkCache(song.id, null);
+        ArtworkColorExtractor.clearCache(song.id);
         await _saveEdits();
         await AudioService().loadSongs();
         notifyListeners();

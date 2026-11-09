@@ -278,7 +278,7 @@ class _CustomBackgroundEditorScreenState
                     // Reset zoom/pan button
                     _buildGlassCircleButton(
                       icon: Icons.center_focus_strong_rounded,
-                      tooltip: 'إعادة ضبط التمركز',
+                      tooltip: LanguageService().t('reset_center_tooltip'),
                       onTap: _resetZoomAndPan,
                     ),
                     const SizedBox(width: 8),
@@ -438,15 +438,15 @@ class _CustomBackgroundEditorScreenState
             child: Row(
               children: [
                 _buildMockCategoryChip(
-                    isRtl ? 'الكل' : 'All', true, accent),
+                    LanguageService().t('all'), true, accent),
                 _buildMockCategoryChip(
-                    isRtl ? 'الأغاني' : 'Songs', false, accent),
+                    LanguageService().t('songs'), false, accent),
                 _buildMockCategoryChip(
-                    isRtl ? 'الألبومات' : 'Albums', false, accent),
+                    LanguageService().t('albums'), false, accent),
                 _buildMockCategoryChip(
-                    isRtl ? 'الفنانون' : 'Artists', false, accent),
+                    LanguageService().t('artists'), false, accent),
                 _buildMockCategoryChip(
-                    isRtl ? 'المفضلة' : 'Favorites', false, accent),
+                    LanguageService().t('favorites'), false, accent),
               ],
             ),
           ),
@@ -460,22 +460,22 @@ class _CustomBackgroundEditorScreenState
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 _buildMockSongTile(
-                  title: isRtl ? 'أغنية تجريبية للمعاينة' : 'Sample Track Preview',
-                  artist: isRtl ? 'فنان تجريبي • ألبوم الموسيقى' : 'Sample Artist • Studio Album',
+                  title: LanguageService().t('sample_track_preview'),
+                  artist: LanguageService().t('sample_artist_album'),
                   duration: '03:45',
                   accent: accent,
                   isCurrent: true,
                 ),
                 _buildMockSongTile(
-                  title: isRtl ? 'لحن هادئ وسينمائي' : 'Cinematic Acoustic Melody',
-                  artist: isRtl ? 'استوديو الصوتيات MPD' : 'MPD Audio Sessions',
+                  title: LanguageService().t('sample_melody'),
+                  artist: LanguageService().t('sample_studio'),
                   duration: '04:12',
                   accent: accent,
                   isCurrent: false,
                 ),
                 _buildMockSongTile(
-                  title: isRtl ? 'إيقاع نيون عصري' : 'Cyber Neon Horizon',
-                  artist: isRtl ? 'موسيقى رائعة' : 'Electronic Waves',
+                  title: LanguageService().t('sample_neon'),
+                  artist: LanguageService().t('sample_electronic'),
                   duration: '02:58',
                   accent: accent,
                   isCurrent: false,
@@ -523,7 +523,7 @@ class _CustomBackgroundEditorScreenState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isRtl ? 'أغنية تجريبية للمعاينة' : 'Sample Track Preview',
+                          LanguageService().t('sample_track_preview'),
                           maxLines: 1,
                           style: const TextStyle(
                             color: Colors.white,
@@ -533,7 +533,7 @@ class _CustomBackgroundEditorScreenState
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          isRtl ? 'استماع مباشر • MPD Music' : 'Now Playing • MPD Music',
+                          LanguageService().t('sample_now_playing'),
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.7),
                             fontSize: 11.5,

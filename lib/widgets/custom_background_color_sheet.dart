@@ -17,6 +17,8 @@ class CustomBackgroundColorItem {
     required this.nameEn,
     required this.hex,
   });
+
+  String get name => LanguageService().isArabic ? nameAr : nameEn;
 }
 
 class CustomBackgroundColorSheet extends StatefulWidget {
@@ -366,9 +368,7 @@ class _CustomBackgroundColorSheetState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isRtl
-                                    ? 'تجربة وضوح النص والكتابة'
-                                    : 'Text Contrast & Clarity',
+                                LanguageService().t('test_text_contrast'),
                                 style: TextStyle(
                                   color: previewTextColor,
                                   fontWeight: FontWeight.bold,
@@ -377,9 +377,7 @@ class _CustomBackgroundColorSheetState
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                isRtl
-                                    ? 'النصوص واضحة وعالية التباين'
-                                    : 'High legibility over background',
+                                LanguageService().t('test_text_sub'),
                                 style: TextStyle(
                                   color: previewSubColor,
                                   fontSize: 11,
@@ -413,7 +411,7 @@ class _CustomBackgroundColorSheetState
                 children: [
                   Expanded(
                     child: _buildTabButton(
-                      title: isRtl ? 'ألوان مختارة' : 'Curated Palettes',
+                      title: LanguageService().t('palette_curated'),
                       icon: Icons.auto_awesome_rounded,
                       index: 0,
                       accent: accent,
@@ -421,7 +419,7 @@ class _CustomBackgroundColorSheetState
                   ),
                   Expanded(
                     child: _buildTabButton(
-                      title: isRtl ? 'طيف مخصص' : 'Custom Spectrum',
+                      title: LanguageService().t('palette_custom_spectrum'),
                       icon: Icons.tune_rounded,
                       index: 1,
                       accent: accent,
@@ -461,7 +459,7 @@ class _CustomBackgroundColorSheetState
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     onPressed: () => Navigator.of(context).pop(),
-                    child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+                    child: Text(LanguageService().t('cancel')),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -481,7 +479,7 @@ class _CustomBackgroundColorSheetState
                     icon: const Icon(Icons.check_rounded,
                         color: Colors.black, size: 20),
                     label: Text(
-                      isRtl ? 'تطبيق اللون' : 'Apply Color',
+                      LanguageService().t('apply_color'),
                       style: const TextStyle(
                         color: Colors.black,
                         fontWeight: FontWeight.w800,
@@ -603,7 +601,7 @@ class _CustomBackgroundColorSheetState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isRtl ? item.nameAr : item.nameEn,
+                        item.name,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13.5,
@@ -650,7 +648,7 @@ class _CustomBackgroundColorSheetState
         children: [
           // 1. Hue Spectrum
           Text(
-            isRtl ? 'درجة اللون (Hue)' : 'Hue',
+            LanguageService().t('hue_label'),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 13,
@@ -703,7 +701,7 @@ class _CustomBackgroundColorSheetState
 
           // 2. Saturation
           Text(
-            isRtl ? 'التشبع (Saturation)' : 'Saturation',
+            LanguageService().t('saturation_label'),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 13,
@@ -751,7 +749,7 @@ class _CustomBackgroundColorSheetState
 
           // 3. Brightness / Value
           Text(
-            isRtl ? 'السطوع (Brightness)' : 'Brightness',
+            LanguageService().t('brightness_label'),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 13,

@@ -4,9 +4,13 @@ import 'package:path_provider/path_provider.dart';
 
 class AppPreferences {
   static const String _onboardingFileName = 'onboarding_completed.flag';
+  static final Map<String, dynamic> _webCache = {};
 
   /// Returns true if the user has already completed onboarding / login
   static Future<bool> isOnboardingCompleted() async {
+    if (kIsWeb) {
+      return _webCache[_onboardingFileName] == true;
+    }
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$_onboardingFileName');
@@ -19,6 +23,10 @@ class AppPreferences {
 
   /// Marks the onboarding as completed and persists it permanently
   static Future<void> setOnboardingCompleted() async {
+    if (kIsWeb) {
+      _webCache[_onboardingFileName] = true;
+      return;
+    }
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$_onboardingFileName');
@@ -30,6 +38,10 @@ class AppPreferences {
 
   /// Resets the onboarding status (for testing or re-showing from settings)
   static Future<void> resetOnboarding() async {
+    if (kIsWeb) {
+      _webCache.remove(_onboardingFileName);
+      return;
+    }
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$_onboardingFileName');
@@ -45,6 +57,9 @@ class AppPreferences {
 
   /// Returns the saved volume or null if not saved
   static Future<double?> getSavedVolume() async {
+    if (kIsWeb) {
+      return _webCache[_volumeFileName] as double?;
+    }
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$_volumeFileName');
@@ -63,6 +78,10 @@ class AppPreferences {
 
   /// Saves the player volume permanently
   static Future<void> setSavedVolume(double volume) async {
+    if (kIsWeb) {
+      _webCache[_volumeFileName] = volume;
+      return;
+    }
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$_volumeFileName');
@@ -76,6 +95,9 @@ class AppPreferences {
 
   /// Returns true for dark, false for light, null if not set
   static Future<bool?> getSavedThemeMode() async {
+    if (kIsWeb) {
+      return _webCache[_themeFileName] as bool?;
+    }
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$_themeFileName');
@@ -91,6 +113,10 @@ class AppPreferences {
 
   /// Saves the theme mode permanently ('dark' or 'light')
   static Future<void> setSavedThemeMode(bool isDark) async {
+    if (kIsWeb) {
+      _webCache[_themeFileName] = isDark;
+      return;
+    }
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$_themeFileName');
@@ -104,6 +130,9 @@ class AppPreferences {
 
   /// Returns saved language code ('ar', 'fr', 'en') or null
   static Future<String?> getSavedLanguage() async {
+    if (kIsWeb) {
+      return _webCache[_languageFileName] as String?;
+    }
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$_languageFileName');
@@ -119,6 +148,10 @@ class AppPreferences {
 
   /// Saves the language code permanently
   static Future<void> setSavedLanguage(String lang) async {
+    if (kIsWeb) {
+      _webCache[_languageFileName] = lang;
+      return;
+    }
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$_languageFileName');

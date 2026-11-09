@@ -28,6 +28,12 @@ class AppTheme {
       ValueNotifier<String>('default'); // 'default' | 'vinyl' | 'waves'
   static final ValueNotifier<String> landscapeColorModeNotifier =
       ValueNotifier<String>('artwork'); // 'app' | 'artwork'
+  static final ValueNotifier<String> listDensityNotifier =
+      ValueNotifier<String>('compact'); // 'compact' | 'normal' | 'grid'
+  static final ValueNotifier<String> artworkShapeNotifier =
+      ValueNotifier<String>('rounded'); // 'rounded' | 'circle'
+  static final ValueNotifier<double> fontScaleNotifier =
+      ValueNotifier<double>(1.0); // 0.80 to 1.35
 
   static bool get isDark {
     // 1. Explicit user selection of dark or light mode takes absolute priority
@@ -79,6 +85,9 @@ class AppTheme {
     customBgOpacityNotifier.value = repo.customBgOpacity;
     playerThemeNotifier.value = repo.playerTheme;
     landscapeColorModeNotifier.value = repo.landscapeColorMode;
+    listDensityNotifier.value = repo.listDensity;
+    artworkShapeNotifier.value = repo.artworkShape;
+    fontScaleNotifier.value = repo.fontScale;
     updateSystemUIOverlay();
   }
 
@@ -134,6 +143,11 @@ class AppTheme {
   static Future<void> setLandscapeColorMode(String mode) async {
     await SettingsRepository().setLandscapeColorMode(mode);
     landscapeColorModeNotifier.value = mode;
+  }
+
+  static Future<void> setFontScale(double scale) async {
+    await SettingsRepository().setFontScale(scale);
+    fontScaleNotifier.value = scale;
   }
 
   // Dynamic Active Theme Colors (auto-switches for all screens)

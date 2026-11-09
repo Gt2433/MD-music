@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import '../services/song_edit_service.dart';
+import '../services/default_songs_service.dart';
 
 class QueryArtworkOrFallback extends StatelessWidget {
   final int id;
@@ -23,21 +25,35 @@ class QueryArtworkOrFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final customArt = SongEditService().getCustomArtworkPath(id);
-    if (customArt != null && File(customArt).existsSync()) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: Image.file(
-          File(customArt),
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          filterQuality: FilterQuality.high,
-        ),
-      );
+    final customArt = SongEditService().getCustomArtworkPath(id) ??
+        DefaultSongsService().getCoverPath(id);
+    if (customArt != null) {
+      if (customArt.startsWith('assets/')) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(borderRadius),
+          child: Image.asset(
+            customArt,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.high,
+          ),
+        );
+      } else if (!kIsWeb && File(customArt).existsSync()) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(borderRadius),
+          child: Image.file(
+            File(customArt),
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.high,
+          ),
+        );
+      }
     }
 
-    final reqSize = artworkRequestSize ?? (size >= 100 ? 1000 : (size * 3).toInt().clamp(300, 800));
+    final reqSize = artworkRequestSize ?? (size >= 150 ? 500 : (size * 2).toInt().clamp(100, 250));
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
@@ -48,9 +64,9 @@ class QueryArtworkOrFallback extends StatelessWidget {
         artworkHeight: size,
         artworkFit: BoxFit.cover,
         artworkBorder: BorderRadius.zero,
-        artworkQuality: FilterQuality.high,
+        artworkQuality: FilterQuality.medium,
         keepOldArtwork: true,
-        quality: 100,
+        quality: 80,
         format: ArtworkFormat.JPEG,
         size: reqSize,
         nullArtworkWidget: Container(

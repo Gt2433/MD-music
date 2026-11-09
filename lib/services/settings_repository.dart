@@ -47,6 +47,11 @@ class SettingsRepository extends ChangeNotifier {
   static const String keyPlayerTheme = 'player_theme'; // 'default' | 'vinyl'
   static const String keyLandscapeColorMode = 'landscape_color_mode'; // 'app' | 'artwork'
   static const String keyAudioEffect = 'audio_effect'; // 'none' | 'deep_echo'
+  static const String keyListDensity = 'list_density'; // 'compact' | 'normal' | 'grid'
+  static const String keyArtworkShape = 'artwork_shape'; // 'rounded' | 'circle'
+  static const String keyFontScale = 'font_scale'; // double: 0.80 to 1.35
+  static const String keyFilterShortAudios = 'filter_short_audios';
+  static const String keySongSortOrder = 'song_sort_order';
 
   // -------------------------------------------------------------
   // Defaults Definition
@@ -62,6 +67,11 @@ class SettingsRepository extends ChangeNotifier {
   static const String defaultPlayerTheme = 'default';
   static const String defaultLandscapeColorMode = 'artwork';
   static const String defaultAudioEffect = 'none';
+  static const String defaultListDensity = 'compact';
+  static const String defaultArtworkShape = 'rounded';
+  static const double defaultFontScale = 1.0;
+  static const bool defaultFilterShortAudios = true;
+  static const String defaultSongSortOrder = 'dateAddedDesc';
 
   // -------------------------------------------------------------
   // In-Memory Cached State
@@ -253,7 +263,7 @@ class SettingsRepository extends ChangeNotifier {
     _notify(keyBgType);
   }
 
-  // 12. Player Theme ('default' | 'vinyl')
+  // 12. Player Theme ('default' | 'vinyl' | 'turntable')
   String get playerTheme {
     final t = _data[keyPlayerTheme] as String? ?? defaultPlayerTheme;
     if (t == 'waves') return 'default';
@@ -261,7 +271,7 @@ class SettingsRepository extends ChangeNotifier {
   }
 
   Future<void> setPlayerTheme(String value) async {
-    if (['default', 'vinyl'].contains(value) && playerTheme != value) {
+    if (['default', 'vinyl', 'turntable'].contains(value) && playerTheme != value) {
       _data[keyPlayerTheme] = value;
       _notify(keyPlayerTheme);
     }
@@ -289,6 +299,65 @@ class SettingsRepository extends ChangeNotifier {
     }
   }
 
+  // 15. List View Density ('compact' | 'normal' | 'grid')
+  String get listDensity =>
+      _data[keyListDensity] as String? ?? defaultListDensity;
+
+  Future<void> setListDensity(String value) async {
+    if (['compact', 'normal', 'grid'].contains(value) && listDensity != value) {
+      _data[keyListDensity] = value;
+      _notify(keyListDensity);
+    }
+  }
+
+  // 16. Song Artwork Shape ('rounded' | 'circle')
+  String get artworkShape =>
+      _data[keyArtworkShape] as String? ?? defaultArtworkShape;
+
+  Future<void> setArtworkShape(String value) async {
+    if (['rounded', 'circle'].contains(value) && artworkShape != value) {
+      _data[keyArtworkShape] = value;
+      _notify(keyArtworkShape);
+    }
+  }
+
+  // 17. App Font Scale (0.80 to 1.35)
+  double get fontScale =>
+      (_data[keyFontScale] as num?)?.toDouble() ?? defaultFontScale;
+
+  Future<void> setFontScale(double value) async {
+    final clamped = double.parse(value.clamp(0.80, 1.35).toStringAsFixed(2));
+    if ((fontScale - clamped).abs() > 0.005) {
+      _data[keyFontScale] = clamped;
+      await _persistToFile();
+      _notify(keyFontScale);
+    }
+  }
+
+  // 18. Filter Short Audios (< 60 seconds - e.g. WhatsApp voice notes)
+  bool get filterShortAudios =>
+      _data[keyFilterShortAudios] as bool? ?? defaultFilterShortAudios;
+
+  Future<void> setFilterShortAudios(bool value) async {
+    if (filterShortAudios != value) {
+      _data[keyFilterShortAudios] = value;
+      await _persistToFile();
+      _notify(keyFilterShortAudios);
+    }
+  }
+
+  // 19. Song Sort Order
+  String get songSortOrder =>
+      _data[keySongSortOrder] as String? ?? defaultSongSortOrder;
+
+  Future<void> setSongSortOrder(String value) async {
+    if (songSortOrder != value) {
+      _data[keySongSortOrder] = value;
+      await _persistToFile();
+      _notify(keySongSortOrder);
+    }
+  }
+
   // -------------------------------------------------------------
   // Reset All Settings to Default (Safe: Keeps playlists & songs)
   // -------------------------------------------------------------
@@ -306,6 +375,11 @@ class SettingsRepository extends ChangeNotifier {
       keyPlayerTheme: defaultPlayerTheme,
       keyLandscapeColorMode: defaultLandscapeColorMode,
       keyAudioEffect: defaultAudioEffect,
+      keyListDensity: defaultListDensity,
+      keyArtworkShape: defaultArtworkShape,
+      keyFontScale: defaultFontScale,
+      keyFilterShortAudios: defaultFilterShortAudios,
+      keySongSortOrder: defaultSongSortOrder,
     };
     await _persistToFile();
     _settingChangesController.add('reset');

@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:on_audio_query/on_audio_query.dart';
 import '../services/audio_service.dart';
 import '../services/language_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/fast_scroller.dart';
 import '../widgets/now_playing_sheet.dart';
+import '../widgets/song_sort_sheet.dart';
 import '../widgets/song_tile.dart';
-
-enum SortMode { dateAdded, name, artist, duration }
+import '../widgets/staggered_song_item.dart';
 
 class SongsScreen extends StatefulWidget {
   const SongsScreen({super.key});
@@ -17,7 +16,6 @@ class SongsScreen extends StatefulWidget {
 }
 
 class _SongsScreenState extends State<SongsScreen> {
-  SortMode _sortMode = SortMode.dateAdded;
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -26,46 +24,14 @@ class _SongsScreenState extends State<SongsScreen> {
     super.dispose();
   }
 
-  String _getSortLabel(SortMode mode) {
-    switch (mode) {
-      case SortMode.dateAdded:
-        return LanguageService.tr('sort_date_added');
-      case SortMode.name:
-        return LanguageService.tr('sort_name');
-      case SortMode.artist:
-        return LanguageService.tr('sort_artist');
-      case SortMode.duration:
-        return LanguageService.tr('sort_duration');
-    }
-  }
-
-  List<SongModel> _getSortedSongs(List<SongModel> songs) {
-    final list = List<SongModel>.from(songs);
-    switch (_sortMode) {
-      case SortMode.name:
-        list.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-        break;
-      case SortMode.artist:
-        list.sort((a, b) => (a.artist ?? '').toLowerCase().compareTo((b.artist ?? '').toLowerCase()));
-        break;
-      case SortMode.duration:
-        list.sort((a, b) => (b.duration ?? 0).compareTo(a.duration ?? 0));
-        break;
-      case SortMode.dateAdded:
-        list.sort((a, b) => (b.dateAdded ?? 0).compareTo(a.dateAdded ?? 0));
-        break;
-    }
-    return list;
-  }
-
   @override
   Widget build(BuildContext context) {
     final audio = AudioService();
 
     return AnimatedBuilder(
-      animation: audio,
+      animation: Listenable.merge([audio, AppTheme.listDensityNotifier]),
       builder: (context, _) {
-        final sortedSongs = _getSortedSongs(audio.allSongs);
+        final sortedSongs = audio.allSongs;
 
         return Scaffold(
           backgroundColor: AppTheme.background,
@@ -149,32 +115,9 @@ class _SongsScreenState extends State<SongsScreen> {
                           ),
 
                           // Sort Chip
-                          PopupMenuButton<SortMode>(
-                            color: AppTheme.cardColor,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                            onSelected: (mode) {
-                              setState(() {
-                                _sortMode = mode;
-                              });
-                            },
-                            itemBuilder: (context) => [
-                              PopupMenuItem(
-                                value: SortMode.dateAdded,
-                                child: Text(LanguageService.tr('sort_date_added'), style: TextStyle(color: AppTheme.textPrimary)),
-                              ),
-                              PopupMenuItem(
-                                value: SortMode.name,
-                                child: Text(LanguageService.tr('sort_name'), style: TextStyle(color: AppTheme.textPrimary)),
-                              ),
-                              PopupMenuItem(
-                                value: SortMode.artist,
-                                child: Text(LanguageService.tr('sort_artist'), style: TextStyle(color: AppTheme.textPrimary)),
-                              ),
-                              PopupMenuItem(
-                                value: SortMode.duration,
-                                child: Text(LanguageService.tr('sort_duration'), style: TextStyle(color: AppTheme.textPrimary)),
-                              ),
-                            ],
+                          InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: () => SongSortSheet.show(context),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               decoration: BoxDecoration(
@@ -184,17 +127,18 @@ class _SongsScreenState extends State<SongsScreen> {
                               ),
                               child: Row(
                                 children: [
-                                  Icon(Icons.sort_rounded, color: AppTheme.textSecondary, size: 16),
+                                  Icon(Icons.swap_vert_rounded, color: AppTheme.accentColor, size: 16),
                                   const SizedBox(width: 6),
                                   Text(
-                                    _getSortLabel(_sortMode),
+                                    audio.currentSortShortLabel,
                                     style: TextStyle(
-                                      color: AppTheme.textSecondary,
+                                      color: AppTheme.accentColor,
                                       fontSize: 12,
-                                      fontWeight: FontWeight.w500,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary, size: 18),
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.accentColor, size: 18),
                                 ],
                               ),
                             ),
@@ -207,15 +151,44 @@ class _SongsScreenState extends State<SongsScreen> {
                     Expanded(
                       child: FastScroller(
                         controller: _scrollController,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.only(bottom: 110),
-                          physics: const BouncingScrollPhysics(),
-                          itemCount: sortedSongs.length,
-                          itemBuilder: (context, index) {
-                            return SongTile(song: sortedSongs[index], playlist: sortedSongs);
-                          },
-                        ),
+                        child: AppTheme.listDensityNotifier.value == 'grid'
+                            ? GridView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.fromLTRB(12, 4, 12, 110),
+                                physics: const BouncingScrollPhysics(),
+                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 10,
+                                  mainAxisSpacing: 10,
+                                  childAspectRatio: 0.74,
+                                ),
+                                itemCount: sortedSongs.length,
+                                itemBuilder: (context, index) {
+                                  return StaggeredSongItem(
+                                    index: index,
+                                    child: SongGridTile(
+                                      song: sortedSongs[index],
+                                      playlist: sortedSongs,
+                                    ),
+                                  );
+                                },
+                              )
+                            : ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.only(bottom: 110),
+                                physics: const BouncingScrollPhysics(),
+                                itemCount: sortedSongs.length,
+                                itemBuilder: (context, index) {
+                                  return StaggeredSongItem(
+                                    index: index,
+                                    child: SongTile(
+                                      song: sortedSongs[index],
+                                      playlist: sortedSongs,
+                                      isCompact: AppTheme.listDensityNotifier.value == 'compact',
+                                    ),
+                                  );
+                                },
+                              ),
                       ),
                     ),
                   ],

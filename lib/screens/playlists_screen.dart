@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import '../services/audio_service.dart';
+import '../services/default_songs_service.dart';
 import '../services/language_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/now_playing_sheet.dart';
 import '../widgets/song_tile.dart';
+import '../widgets/staggered_song_item.dart';
 import '../widgets/glass_dialog.dart';
 
 class PlaylistsScreen extends StatelessWidget {
@@ -100,7 +102,10 @@ class PlaylistsScreen extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         itemCount: songs.length,
                         itemBuilder: (context, index) {
-                          return SongTile(song: songs[index], playlist: songs);
+                          return StaggeredSongItem(
+                            index: index,
+                            child: SongTile(song: songs[index], playlist: songs),
+                          );
                         },
                       ),
               ),
@@ -221,6 +226,41 @@ class PlaylistsScreen extends StatelessWidget {
                         }
                       }
                     : null,
+              ),
+
+              const SizedBox(height: 12),
+
+              // 4. MD Originals Card
+              Builder(
+                builder: (context) {
+                  final mdSongs = DefaultSongsService().defaultSongs;
+                  return _buildPlaylistCard(
+                    context,
+                    title: LanguageService().t('md_originals_title'),
+                    subtitle: LanguageService().t('md_originals_sub').replaceAll('{count}', '${mdSongs.length}'),
+                    icon: Icons.album_rounded,
+                    iconColor: const Color(0xFF00E676),
+                    gradient: const [Color(0xFF10281E), Color(0xFF0C1713)],
+                    borderColor: const Color(0xFF1B402E),
+                    onTap: () {
+                      _openPlaylistDetails(
+                        context,
+                        title: LanguageService().t('md_originals_title'),
+                        songs: mdSongs,
+                        icon: Icons.album_rounded,
+                        iconColor: const Color(0xFF00E676),
+                      );
+                    },
+                    onQuickPlay: mdSongs.isNotEmpty
+                        ? () async {
+                            await audio.playSong(mdSongs.first, playlist: mdSongs);
+                            if (context.mounted) {
+                              NowPlayingSheet.show(context);
+                            }
+                          }
+                        : null,
+                  );
+                },
               ),
 
               const SizedBox(height: 24),

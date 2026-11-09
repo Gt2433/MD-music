@@ -9,7 +9,22 @@ import 'package:on_audio_query/on_audio_query.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:audio_session/audio_session.dart';
+import 'settings_repository.dart';
 import 'song_edit_service.dart';
+import 'default_songs_service.dart';
+import 'language_service.dart';
+
+enum SongSortOrder {
+  dateAddedDesc, // تاريخ الإضافة (الأحدث أولاً)
+  dateAddedAsc,  // تاريخ الإضافة (الأقدم أولاً)
+  titleAsc,      // اسم الأغنية (أ - ي)
+  titleDesc,     // اسم الأغنية (ي - أ)
+  artistAsc,     // اسم الفنان (أ - ي)
+  sizeDesc,      // حجم الملف (الأكبر أولاً)
+  sizeAsc,       // حجم الملف (الأصغر أولاً)
+  durationDesc,  // المدة الزمنية (الأطول أولاً)
+  durationAsc,   // المدة الزمنية (الأقصر أولاً)
+}
 
 class AudioService extends ChangeNotifier {
   static final AudioService _instance = AudioService._internal();
@@ -18,6 +33,14 @@ class AudioService extends ChangeNotifier {
     _loadDeletedSongs();
     _initPlayer();
     _initAudioSession();
+    SettingsRepository().onSettingChanged.listen((key) {
+      if (key == SettingsRepository.keyFilterShortAudios || key == 'reset') {
+        loadSongs();
+      } else if (key == SettingsRepository.keySongSortOrder) {
+        _applySorting();
+        notifyListeners();
+      }
+    });
   }
 
   static final AndroidEqualizer _equalizer = AndroidEqualizer();
@@ -44,12 +67,13 @@ class AudioService extends ChangeNotifier {
   final Set<int> _favoriteIds = {};
   final Set<int> _deletedSongIds = {};
   ConcatenatingAudioSource? _playlistSource;
+  List<int> _loadedPlaylistSongIds = [];
 
   bool _isSamePlaylistAs(List<SongModel> list) {
     if (_playlistSource == null || _player.audioSource == null) return false;
-    if (_currentPlaylist.length != list.length) return false;
+    if (_loadedPlaylistSongIds.length != list.length) return false;
     for (int i = 0; i < list.length; i++) {
-      if (_currentPlaylist[i].id != list[i].id) return false;
+      if (_loadedPlaylistSongIds[i] != list[i].id) return false;
     }
     return true;
   }
@@ -105,6 +129,101 @@ class AudioService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // -------------------------------------------------------------
+  // Song Sorting Strategy & State
+  // -------------------------------------------------------------
+  SongSortOrder get currentSortOrder {
+    final raw = SettingsRepository().songSortOrder;
+    for (final order in SongSortOrder.values) {
+      if (order.name == raw) return order;
+    }
+    return SongSortOrder.dateAddedDesc;
+  }
+
+  Future<void> setSortOrder(SongSortOrder order) async {
+    await SettingsRepository().setSongSortOrder(order.name);
+    _applySorting();
+    notifyListeners();
+  }
+
+  String get currentSortLabel {
+    switch (currentSortOrder) {
+      case SongSortOrder.dateAddedDesc:
+        return LanguageService().t('sort_date_added_desc');
+      case SongSortOrder.dateAddedAsc:
+        return LanguageService().t('sort_date_added_asc');
+      case SongSortOrder.titleAsc:
+        return LanguageService().t('sort_title_asc');
+      case SongSortOrder.titleDesc:
+        return LanguageService().t('sort_title_desc');
+      case SongSortOrder.artistAsc:
+        return LanguageService().t('sort_artist_asc');
+      case SongSortOrder.sizeDesc:
+        return LanguageService().t('sort_size_desc');
+      case SongSortOrder.sizeAsc:
+        return LanguageService().t('sort_size_asc');
+      case SongSortOrder.durationDesc:
+        return LanguageService().t('sort_duration_desc');
+      case SongSortOrder.durationAsc:
+        return LanguageService().t('sort_duration_asc');
+    }
+  }
+
+  String get currentSortShortLabel {
+    switch (currentSortOrder) {
+      case SongSortOrder.dateAddedDesc:
+        return LanguageService().t('sort_short_date_added');
+      case SongSortOrder.dateAddedAsc:
+        return LanguageService().t('sort_short_oldest');
+      case SongSortOrder.titleAsc:
+        return 'A-Z';
+      case SongSortOrder.titleDesc:
+        return 'Z-A';
+      case SongSortOrder.artistAsc:
+        return LanguageService().t('sort_short_artist');
+      case SongSortOrder.sizeDesc:
+        return LanguageService().t('sort_short_size_desc');
+      case SongSortOrder.sizeAsc:
+        return LanguageService().t('sort_short_size_asc');
+      case SongSortOrder.durationDesc:
+        return LanguageService().t('sort_short_duration_desc');
+      case SongSortOrder.durationAsc:
+        return LanguageService().t('sort_short_duration_asc');
+    }
+  }
+
+  void _applySorting() {
+    switch (currentSortOrder) {
+      case SongSortOrder.dateAddedDesc:
+        _allSongs.sort((a, b) => (b.dateAdded ?? 0).compareTo(a.dateAdded ?? 0));
+        break;
+      case SongSortOrder.dateAddedAsc:
+        _allSongs.sort((a, b) => (a.dateAdded ?? 0).compareTo(b.dateAdded ?? 0));
+        break;
+      case SongSortOrder.titleAsc:
+        _allSongs.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+        break;
+      case SongSortOrder.titleDesc:
+        _allSongs.sort((a, b) => b.title.toLowerCase().compareTo(a.title.toLowerCase()));
+        break;
+      case SongSortOrder.artistAsc:
+        _allSongs.sort((a, b) => (a.artist ?? '').toLowerCase().compareTo((b.artist ?? '').toLowerCase()));
+        break;
+      case SongSortOrder.sizeDesc:
+        _allSongs.sort((a, b) => b.size.compareTo(a.size));
+        break;
+      case SongSortOrder.sizeAsc:
+        _allSongs.sort((a, b) => a.size.compareTo(b.size));
+        break;
+      case SongSortOrder.durationDesc:
+        _allSongs.sort((a, b) => (b.duration ?? 0).compareTo(a.duration ?? 0));
+        break;
+      case SongSortOrder.durationAsc:
+        _allSongs.sort((a, b) => (a.duration ?? 0).compareTo(b.duration ?? 0));
+        break;
+    }
+  }
+
   String _currentEffect = 'none';
   String get currentEffect => _currentEffect;
 
@@ -112,10 +231,7 @@ class AudioService extends ChangeNotifier {
     _currentEffect = effectId;
     try {
       if (effectId == 'deep_echo') {
-        // Deep Echo effect: deep baritone pitch (0.91)
-        await _player.setPitch(0.91);
-
-        if (Platform.isAndroid) {
+        if (!kIsWeb && Platform.isAndroid) {
           try {
             await _equalizer.setEnabled(true);
             final params = await _equalizer.parameters;
@@ -139,9 +255,10 @@ class AudioService extends ChangeNotifier {
             debugPrint('Equalizer hardware effect not available: $e');
           }
         }
+        await _applyPitch();
       } else {
         // 'none' - restore natural audio
-        if (Platform.isAndroid) {
+        if (!kIsWeb && Platform.isAndroid) {
           try {
             await _equalizer.setEnabled(false);
             await _loudnessEnhancer.setEnabled(false);
@@ -158,10 +275,11 @@ class AudioService extends ChangeNotifier {
   Future<void> _applyPitch() async {
     try {
       if (_currentEffect == 'deep_echo') {
-        await _player.setPitch(0.91);
+        final base = _linkPitchToSpeed ? (_playbackSpeed * 0.91) : 0.91;
+        await _player.setPitch(base.clamp(0.1, 3.0));
       } else {
         final targetPitch = _linkPitchToSpeed ? _playbackSpeed : 1.0;
-        await _player.setPitch(targetPitch);
+        await _player.setPitch(targetPitch.clamp(0.1, 3.0));
       }
     } catch (e) {
       debugPrint('Error setting pitch: $e');
@@ -255,7 +373,7 @@ class AudioService extends ChangeNotifier {
   Future<bool> checkAndRequestPermissions() async {
     bool permissionGranted = false;
 
-    if (Platform.isAndroid) {
+    if (!kIsWeb && Platform.isAndroid) {
       // 1. Request POST_NOTIFICATIONS (Android 13+)
       final notifStatus = await Permission.notification.status;
       if (!notifStatus.isGranted) {
@@ -305,7 +423,18 @@ class AudioService extends ChangeNotifier {
   }
 
   List<SongModel> _filterSongs(List<SongModel> songs) {
-    return songs.where((s) => !_deletedSongIds.contains(s.id)).toList();
+    final filterShort = SettingsRepository().filterShortAudios;
+    return songs.where((s) {
+      if (_deletedSongIds.contains(s.id)) return false;
+      if (filterShort) {
+        final dur = s.duration;
+        // Ignore audio clips shorter than 60 seconds (60,000 ms - e.g. WhatsApp voice notes, ringtones)
+        if (dur != null && dur > 0 && dur < 60000) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
   }
 
   Future<Map<String, int>> rescanLibrary() async {
@@ -313,18 +442,30 @@ class AudioService extends ChangeNotifier {
     notifyListeners();
     try {
       final oldCount = _allSongs.length;
-      final songs = await _audioQuery.querySongs(
-        sortType: SongSortType.DATE_ADDED,
-        orderType: OrderType.DESC_OR_GREATER,
-        uriType: UriType.EXTERNAL,
-        ignoreCase: true,
-      );
-      _allSongs = _filterSongs(songs);
+      List<SongModel> songs = [];
+      if (!kIsWeb) {
+        songs = await _audioQuery.querySongs(
+          sortType: SongSortType.DATE_ADDED,
+          orderType: OrderType.DESC_OR_GREATER,
+          uriType: UriType.EXTERNAL,
+          ignoreCase: true,
+        );
+      }
+      final userSongs = _filterSongs(songs);
+      if (userSongs.isEmpty) {
+        _allSongs = List<SongModel>.from(DefaultSongsService().defaultSongs);
+      } else {
+        _allSongs = userSongs;
+      }
+      _applySorting();
       final added = (_allSongs.length - oldCount).clamp(0, 999999);
       final removed = (oldCount - _allSongs.length).clamp(0, 999999);
       return {'total': _allSongs.length, 'added': added, 'removed': removed};
     } catch (e) {
       debugPrint('Error rescanning library: $e');
+      if (_allSongs.isEmpty) {
+        _allSongs = List<SongModel>.from(DefaultSongsService().defaultSongs);
+      }
       return {'total': _allSongs.length, 'added': 0, 'removed': 0};
     } finally {
       _isLoading = false;
@@ -337,16 +478,29 @@ class AudioService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final songs = await _audioQuery.querySongs(
-        sortType: SongSortType.DATE_ADDED,
-        orderType: OrderType.DESC_OR_GREATER,
-        uriType: UriType.EXTERNAL,
-        ignoreCase: true,
-      );
+      List<SongModel> songs = [];
+      if (!kIsWeb) {
+        songs = await _audioQuery.querySongs(
+          sortType: SongSortType.DATE_ADDED,
+          orderType: OrderType.DESC_OR_GREATER,
+          uriType: UriType.EXTERNAL,
+          ignoreCase: true,
+        );
+      }
 
-      _allSongs = _filterSongs(songs);
+      final userSongs = _filterSongs(songs);
+      if (userSongs.isEmpty) {
+        _allSongs = List<SongModel>.from(DefaultSongsService().defaultSongs);
+      } else {
+        _allSongs = userSongs;
+      }
+      _applySorting();
     } catch (e) {
       debugPrint('Error loading songs: $e');
+      if (_allSongs.isEmpty) {
+        _allSongs = List<SongModel>.from(DefaultSongsService().defaultSongs);
+        _applySorting();
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -392,9 +546,10 @@ class AudioService extends ChangeNotifier {
       return _artworkBytesCache[songId];
     }
 
-    // 0. Check custom artwork edited via SongEditService
-    final customArt = SongEditService().getCustomArtworkPath(songId);
-    if (customArt != null && File(customArt).existsSync()) {
+    // 0. Check custom artwork edited via SongEditService or Default MD Music songs
+    final customArt = SongEditService().getCustomArtworkPath(songId) ??
+        DefaultSongsService().getCoverPath(songId);
+    if (customArt != null && !kIsWeb && File(customArt).existsSync()) {
       try {
         final bytes = await File(customArt).readAsBytes();
         if (bytes.isNotEmpty) {
@@ -496,9 +651,10 @@ class AudioService extends ChangeNotifier {
   final Map<int, Uri> _songArtworkUriCache = {};
 
   Future<Uri?> _getSongArtworkUri(SongModel song) async {
-    // 0. Check custom artwork edited via SongEditService
-    final customArt = SongEditService().getCustomArtworkPath(song.id);
-    if (customArt != null && File(customArt).existsSync()) {
+    // 0. Check custom artwork edited via SongEditService or Default MD Music songs
+    final customArt = SongEditService().getCustomArtworkPath(song.id) ??
+        DefaultSongsService().getCoverPath(song.id);
+    if (customArt != null && !kIsWeb && File(customArt).existsSync()) {
       final uri = Uri.file(customArt);
       _songArtworkUriCache[song.id] = uri;
       return uri;
@@ -571,6 +727,12 @@ class AudioService extends ChangeNotifier {
   }
 
   AudioSource _createAudioSource(SongModel song, {Uri? artUri}) {
+    if (song.data.startsWith('assets/')) {
+      return AudioSource.asset(
+        song.data,
+        tag: createMediaItemForSong(song, artUri: artUri),
+      );
+    }
     final uri = (song.uri != null && song.uri!.isNotEmpty)
         ? Uri.parse(song.uri!)
         : Uri.file(song.data);
@@ -626,6 +788,141 @@ class AudioService extends ChangeNotifier {
     );
   }
 
+  /// Checks whether [songId] is queued as the very next song in the active playlist
+  bool isNextSong(int songId) {
+    if (_currentSong == null || _currentPlaylist.isEmpty) return false;
+    final nextIdx = _currentIndex + 1;
+    if (nextIdx >= 0 && nextIdx < _currentPlaylist.length) {
+      return _currentPlaylist[nextIdx].id == songId;
+    }
+    return false;
+  }
+
+  /// Sets [song] to play immediately after the currently playing song ("التشغيل التالي").
+  /// When the current song finishes or when user taps "next", this song will play next.
+  Future<void> setAsNextSong(SongModel song) async {
+    // If no song is loaded yet, simply play it
+    if (_currentSong == null) {
+      await playSong(song);
+      return;
+    }
+
+    // If it's already the currently playing song, do nothing
+    if (_currentSong!.id == song.id) {
+      return;
+    }
+
+    // If repeat one is on, switch to repeat all so it actually advances to next track
+    if (_loopMode == LoopMode.one) {
+      _loopMode = LoopMode.all;
+    }
+
+    // Refresh valid current index
+    if (_currentIndex < 0 || _currentIndex >= _currentPlaylist.length) {
+      final found = _currentPlaylist.indexWhere((s) => s.id == _currentSong!.id);
+      _currentIndex = found != -1 ? found : 0;
+    }
+
+    final int targetInsertIndex = _currentIndex + 1;
+    final int existingIdx = _currentPlaylist.indexWhere((s) => s.id == song.id);
+
+    // If it is already immediately next, done!
+    if (existingIdx == targetInsertIndex) {
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final fallbackUri = await _getFallbackArtworkUri();
+      final artUri = await _getSongArtworkUri(song);
+      final newSource = _createAudioSource(
+        song,
+        artUri: _songArtworkUriCache[song.id] ?? artUri ?? fallbackUri,
+      );
+
+      if (existingIdx != -1) {
+        // Song is already somewhere in _currentPlaylist
+        if (_playlistSource != null && _playlistSource!.length == _currentPlaylist.length) {
+          // Remove from old position and insert at new position in ConcatenatingAudioSource
+          _currentPlaylist.removeAt(existingIdx);
+          _loadedPlaylistSongIds.removeAt(existingIdx);
+
+          if (existingIdx < _currentIndex) {
+            _currentIndex--;
+          }
+          final int adjustedInsertPos = _currentIndex + 1;
+
+          _currentPlaylist.insert(adjustedInsertPos, song);
+          _loadedPlaylistSongIds.insert(adjustedInsertPos, song.id);
+
+          await _playlistSource!.removeAt(existingIdx);
+          await _playlistSource!.insert(adjustedInsertPos, newSource);
+        } else {
+          _currentPlaylist.removeAt(existingIdx);
+          _loadedPlaylistSongIds.removeAt(existingIdx);
+          if (existingIdx < _currentIndex) {
+            _currentIndex--;
+          }
+          final int adjustedInsertPos = _currentIndex + 1;
+          _currentPlaylist.insert(adjustedInsertPos, song);
+          _loadedPlaylistSongIds.insert(adjustedInsertPos, song.id);
+          await _rebuildPlaylistSourcePreservingCurrent();
+        }
+      } else {
+        // Song is NOT currently in _currentPlaylist (e.g. from search or another album)
+        _currentPlaylist.insert(targetInsertIndex, song);
+        _loadedPlaylistSongIds.insert(targetInsertIndex, song.id);
+
+        if (_playlistSource != null) {
+          await _playlistSource!.insert(targetInsertIndex, newSource);
+        } else {
+          await _rebuildPlaylistSourcePreservingCurrent();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error setting song as next: $e, rebuilding playlist source fallback');
+      await _rebuildPlaylistSourcePreservingCurrent();
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> _rebuildPlaylistSourcePreservingCurrent() async {
+    try {
+      if (_currentSong == null || _currentPlaylist.isEmpty) return;
+      final currentPos = _player.position;
+      final isPlaying = _player.playing;
+      final fallbackUri = await _getFallbackArtworkUri();
+
+      final sources = <AudioSource>[];
+      for (final s in _currentPlaylist) {
+        final sArtUri = _songArtworkUriCache[s.id] ?? fallbackUri;
+        sources.add(_createAudioSource(s, artUri: sArtUri));
+      }
+
+      final newPlaylistSource = ConcatenatingAudioSource(children: sources);
+      _playlistSource = newPlaylistSource;
+      _loadedPlaylistSongIds = _currentPlaylist.map((s) => s.id).toList();
+
+      await _player.setAudioSource(
+        newPlaylistSource,
+        initialIndex: _currentIndex,
+        initialPosition: currentPos,
+      );
+
+      if (_playbackSpeed != 1.0) {
+        await _player.setSpeed(_playbackSpeed);
+      }
+      await _applyPitch();
+
+      if (isPlaying) {
+        await _player.play();
+      }
+    } catch (e) {
+      debugPrint('Error rebuilding playlist source: $e');
+    }
+  }
+
   Future<void> playSong(
     SongModel song, {
     List<SongModel>? playlist,
@@ -665,7 +962,7 @@ class AudioService extends ChangeNotifier {
 
     notifyListeners();
 
-    if (Platform.isAndroid) {
+    if (!kIsWeb && Platform.isAndroid) {
       try {
         final notifStatus = await Permission.notification.status;
         if (!notifStatus.isGranted) {
@@ -679,7 +976,7 @@ class AudioService extends ChangeNotifier {
       final artUri = await _getSongArtworkUri(song);
 
       // Check if the current playlist is already active
-      final isSamePlaylist = _isSamePlaylistAs(list) && !preserveShuffleOrder;
+      final isSamePlaylist = _isSamePlaylistAs(list) && !preserveShuffleOrder && !_isShuffle;
 
       if (isSamePlaylist && _player.audioSource != null) {
         await _player.seek(Duration.zero, index: targetIndex);
@@ -701,6 +998,7 @@ class AudioService extends ChangeNotifier {
 
         final playlistSource = ConcatenatingAudioSource(children: sources);
         _playlistSource = playlistSource;
+        _loadedPlaylistSongIds = _currentPlaylist.map((s) => s.id).toList();
         await _player.setAudioSource(playlistSource, initialIndex: targetIndex);
         if (_playbackSpeed != 1.0) {
           await _player.setSpeed(_playbackSpeed);
@@ -714,6 +1012,7 @@ class AudioService extends ChangeNotifier {
       // Direct single-track fallback
       try {
         _playlistSource = null;
+        _loadedPlaylistSongIds = [song.id];
         final artUri = await _getSongArtworkUri(song);
         final singleSource = _createAudioSource(song, artUri: artUri);
         await _player.setAudioSource(singleSource);
@@ -924,6 +1223,7 @@ class AudioService extends ChangeNotifier {
 
       final playlistSource = ConcatenatingAudioSource(children: sources);
       _playlistSource = playlistSource;
+      _loadedPlaylistSongIds = _currentPlaylist.map((s) => s.id).toList();
       await _player.setAudioSource(
         playlistSource,
         initialIndex: initialIndex,
@@ -1055,6 +1355,7 @@ class AudioService extends ChangeNotifier {
 
       // Invalidate playlist source so subsequent playback builds a clean aligned queue
       _playlistSource = null;
+      _loadedPlaylistSongIds = [];
 
       // 5. Handle player audio source synchronization
       if (_currentPlaylist.isEmpty) {

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import '../services/album_service.dart';
 import '../services/audio_service.dart';
+import '../services/default_songs_service.dart';
 import '../services/language_service.dart';
 import '../services/song_edit_service.dart';
 import '../services/song_selection_service.dart';
@@ -14,10 +15,13 @@ import '../widgets/fast_scroller.dart';
 import '../widgets/now_playing_sheet.dart';
 import '../widgets/query_artwork_or_fallback.dart';
 import '../widgets/song_tile.dart';
+import '../widgets/staggered_song_item.dart';
 import '../widgets/glass_dialog.dart';
 import 'album_details_screen.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
+import 'music_recognition_screen.dart';
+import '../widgets/song_sort_sheet.dart';
 import '../services/app_update_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -28,7 +32,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  final ScrollController _scrollController = ScrollController();
   late final AnimationController _headerAnimController;
   late final AnimationController _glowAnimController;
   bool _isHeaderVisible = true;
@@ -45,7 +48,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 850),
     );
-    _scrollController.addListener(_handleScroll);
     _scheduleUpdateCheck();
   }
 
@@ -61,19 +63,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _handleScroll() {
-    if (_scrollController.hasClients && _scrollController.offset <= 10) {
-      if (!_isHeaderVisible) {
-        _headerAnimController.forward();
-        _isHeaderVisible = true;
-      }
-    }
-  }
-
   @override
   void dispose() {
-    _scrollController.removeListener(_handleScroll);
-    _scrollController.dispose();
     _headerAnimController.dispose();
     _glowAnimController.dispose();
     super.dispose();
@@ -89,6 +80,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   ];
 
   String _selectedCategory = 'all';
+  double _slideDirection = 1.0;
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +89,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final selection = SongSelectionService();
 
     return AnimatedBuilder(
-      animation: Listenable.merge([audio, albumService, selection]),
+      animation: Listenable.merge([audio, albumService, selection, AppTheme.listDensityNotifier]),
       builder: (context, _) {
         final isSelectionMode = selection.isSelectionMode;
 
@@ -154,7 +146,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             borderRadius: BorderRadius.circular(22),
                             onTap: () {
                               if (_selectedCategory != catKey) {
+                                final oldIdx = _categories.indexOf(_selectedCategory);
+                                final newIdx = _categories.indexOf(catKey);
+                                final isRtl = Directionality.of(context) == TextDirection.rtl;
+                                final isGoingRight = isRtl ? (newIdx < oldIdx) : (newIdx > oldIdx);
                                 setState(() {
+                                  _slideDirection = isGoingRight ? 1.0 : -1.0;
                                   _selectedCategory = catKey;
                                 });
                               }
@@ -212,70 +209,71 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 // 3. Dynamic Category Content with Smooth Animated Transition
                 Expanded(
                   child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 280),
+                    duration: const Duration(milliseconds: 260),
                     switchInCurve: Curves.easeOutCubic,
                     switchOutCurve: Curves.easeInCubic,
                     transitionBuilder: (child, animation) {
-                      return FadeTransition(
-                        opacity: CurvedAnimation(
-                          parent: animation,
-                          curve: const Interval(0.05, 1.0, curve: Curves.easeOut),
-                        ),
-                        child: SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(0.04, 0.0),
+                      final curvedIn = CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      );
+                      final currentDirection = _slideDirection;
+
+                      return AnimatedBuilder(
+                        animation: animation,
+                        builder: (context, _) {
+                          // Slide offset responding to right/left direction
+                          final slideAnim = Tween<Offset>(
+                            begin: Offset(-0.06 * currentDirection, 0.0),
                             end: Offset.zero,
-                          ).animate(CurvedAnimation(
-                            parent: animation,
-                            curve: Curves.easeOutCubic,
-                          )),
-                          child: child,
-                        ),
+                          ).animate(curvedIn);
+
+                          // Blur peaks during transition and clears completely when settled (at 1.0)
+                          final blurSigma = ((1.0 - animation.value) * 8.0).clamp(0.0, 10.0);
+
+                          Widget content = SlideTransition(
+                            position: slideAnim,
+                            child: FadeTransition(
+                              opacity: CurvedAnimation(
+                                parent: animation,
+                                curve: const Interval(0.06, 1.0, curve: Curves.easeOut),
+                              ),
+                              child: child,
+                            ),
+                          );
+
+                          // Only apply ImageFiltered while transitioning; remove completely when settled
+                          if (blurSigma > 0.08) {
+                            content = ImageFiltered(
+                              imageFilter: ImageFilter.blur(
+                                sigmaX: blurSigma,
+                                sigmaY: blurSigma,
+                              ),
+                              child: content,
+                            );
+                          }
+
+                          return content;
+                        },
                       );
                     },
-                    child: KeyedSubtree(
+                    child: _CategoryPageView(
                       key: ValueKey<String>(_selectedCategory),
-                      child: NotificationListener<UserScrollNotification>(
-                        onNotification: (notification) {
-                          if (notification.direction == ScrollDirection.reverse) {
-                            if (_isHeaderVisible && _scrollController.hasClients && _scrollController.offset > 20) {
-                              _headerAnimController.reverse();
-                              _isHeaderVisible = false;
-                            }
-                          } else if (notification.direction == ScrollDirection.forward) {
-                            if (!_isHeaderVisible) {
-                              _headerAnimController.forward();
-                              _isHeaderVisible = true;
-                            }
-                          }
-                          return false;
-                        },
-                        child: FastScroller(
-                          controller: _scrollController,
-                          child: RefreshIndicator(
-                            color: AppTheme.primaryGreen,
-                            backgroundColor: AppTheme.cardColor,
-                            displacement: 24,
-                            onRefresh: () async {
-                              await audio.loadSongs();
-                            },
-                            child: CustomScrollView(
-                              controller: _scrollController,
-                              key: PageStorageKey<String>(_selectedCategory),
-                              physics: const AlwaysScrollableScrollPhysics(
-                                parent: BouncingScrollPhysics(),
-                              ),
-                              slivers: [
-                                ..._buildCategorySlivers(context, audio),
-                                // Bottom padding for mini-player
-                                const SliverToBoxAdapter(
-                                  child: SizedBox(height: 110),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                      category: _selectedCategory,
+                      audio: audio,
+                      slivers: _buildCategorySlivers(context, audio),
+                      onScrollDown: () {
+                        if (_isHeaderVisible) {
+                          _headerAnimController.reverse();
+                          _isHeaderVisible = false;
+                        }
+                      },
+                      onScrollUp: () {
+                        if (!_isHeaderVisible) {
+                          _headerAnimController.forward();
+                          _isHeaderVisible = true;
+                        }
+                      },
                     ),
                   ),
                 ),
@@ -288,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
   List<SongModel> _getActiveSongs(AudioService audio) {
-    if (_selectedCategory == 'favorites' || _selectedCategory == 'المفضلة') {
+    if (_selectedCategory == 'favorites') {
       return audio.allSongs
           .where((s) => audio.favoriteIds.contains(s.id))
           .toList();
@@ -322,6 +320,36 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const SearchScreen()),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppTheme.cardColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.accentColor.withOpacity(0.4), width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.accentColor.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  tooltip: LanguageService().t('music_recognition_title'),
+                  icon: Icon(Icons.graphic_eq_rounded,
+                      color: AppTheme.accentColor, size: 21),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const MusicRecognitionScreen()),
                     );
                   },
                 ),
@@ -459,9 +487,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           size: 19),
                       const SizedBox(width: 4),
                       Text(
-                        LanguageService().isArabic
-                            ? 'تشغيل بالترتيب'
-                            : 'Play in Order',
+                        LanguageService().t('play_in_order'),
                         style: TextStyle(
                           color: accent.computeLuminance() > 0.4
                               ? Colors.black
@@ -701,7 +727,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
                 SizedBox(height: 16),
                 Text(
-                  'جاري فحص ذاكرة الهاتف...',
+                  LanguageService().t('scanning_memory'),
                   style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
                 ),
               ],
@@ -723,20 +749,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     switch (_selectedCategory) {
       case 'all':
       case 'songs':
-      case 'الكل':
-      case 'الأغاني':
         return _buildSongsSlivers(context, audio);
       case 'albums':
-      case 'الألبومات':
         return _buildAlbumsSlivers(context, audio);
       case 'artists':
-      case 'الفنانون':
         return _buildArtistsSlivers(context, audio);
       case 'playlists':
-      case 'قوائم التشغيل':
         return _buildPlaylistsSlivers(context, audio);
       case 'favorites':
-      case 'المفضلة':
         return _buildFavoritesSlivers(context, audio);
       default:
         return _buildSongsSlivers(context, audio);
@@ -764,7 +784,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
               const SizedBox(width: 8),
               Text(
-                (_selectedCategory == 'all' || _selectedCategory == 'الكل')
+                _selectedCategory == 'all'
                     ? LanguageService().t('all_songs')
                     : LanguageService().t('songs_list'),
                 style: TextStyle(
@@ -790,21 +810,93 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
               ),
+              const Spacer(),
+              // Sort Button with Current Sort Label
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => SongSortSheet.show(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppTheme.accentColor.withValues(alpha: 0.25),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.swap_vert_rounded,
+                          size: 16,
+                          color: AppTheme.accentColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          audio.currentSortShortLabel,
+                          style: TextStyle(
+                            color: AppTheme.accentColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
 
       // Songs List
-      SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final song = audio.allSongs[index];
-            return SongTile(song: song, playlist: audio.allSongs);
-          },
-          childCount: audio.allSongs.length,
+      if (AppTheme.listDensityNotifier.value == 'grid')
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 110),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 0.74,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final song = audio.allSongs[index];
+                return StaggeredSongItem(
+                  index: index,
+                  child: SongGridTile(song: song, playlist: audio.allSongs),
+                );
+              },
+              childCount: audio.allSongs.length,
+            ),
+          ),
+        )
+      else
+        SliverPadding(
+          padding: const EdgeInsets.only(bottom: 110),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final song = audio.allSongs[index];
+                return StaggeredSongItem(
+                  index: index,
+                  child: SongTile(
+                    song: song,
+                    playlist: audio.allSongs,
+                    isCompact: AppTheme.listDensityNotifier.value == 'compact',
+                  ),
+                );
+              },
+              childCount: audio.allSongs.length,
+            ),
+          ),
         ),
-      ),
     ];
   }
 
@@ -1320,7 +1412,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: ListView.builder(
                   itemCount: songs.length,
                   itemBuilder: (context, index) {
-                    return SongTile(song: songs[index], playlist: songs);
+                    return StaggeredSongItem(
+                      index: index,
+                      child: SongTile(song: songs[index], playlist: songs),
+                    );
                   },
                 ),
               ),
@@ -1504,6 +1599,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   });
                 },
               ),
+              const SizedBox(height: 8),
+              _buildFlatPlaylistTile(
+                icon: Icons.album_rounded,
+                iconColor: const Color(0xFF00E676),
+                title: LanguageService().t('md_originals_title'),
+                subtitle: LanguageService().t('md_originals_sub').replaceAll('{count}', '${DefaultSongsService().defaultSongs.length}'),
+                onTap: () {
+                  _showSongListSheet(
+                    context,
+                    LanguageService().t('md_originals_title'),
+                    DefaultSongsService().defaultSongs,
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -1633,9 +1742,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF161E26),
+                      color: AppTheme.isDark ? const Color(0xFF161E26) : const Color(0xFFFFEBEE),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF222C38), width: 1),
+                      border: Border.all(
+                        color: AppTheme.isDark ? const Color(0xFF222C38) : const Color(0xFFFFCDD2),
+                        width: 1,
+                      ),
                     ),
                     child: Text(
                       '${favSongs.length}',
@@ -1682,14 +1794,46 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
       ),
-      SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            return SongTile(song: favSongs[index], playlist: favSongs);
-          },
-          childCount: favSongs.length,
+      if (AppTheme.listDensityNotifier.value == 'grid')
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 110),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 0.74,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                return StaggeredSongItem(
+                  index: index,
+                  child: SongGridTile(song: favSongs[index], playlist: favSongs),
+                );
+              },
+              childCount: favSongs.length,
+            ),
+          ),
+        )
+      else
+        SliverPadding(
+          padding: const EdgeInsets.only(bottom: 110),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                return StaggeredSongItem(
+                  index: index,
+                  child: SongTile(
+                    song: favSongs[index],
+                    playlist: favSongs,
+                    isCompact: AppTheme.listDensityNotifier.value == 'compact',
+                  ),
+                );
+              },
+              childCount: favSongs.length,
+            ),
+          ),
         ),
-      ),
     ];
   }
 
@@ -1757,10 +1901,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 final granted = await audio.checkAndRequestPermissions();
                 if (!granted && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                    SnackBar(
                       content: Text(
-                        'يرجى منح إذن الوصول إلى الموسيقى من إعدادات الهاتف لعرض أغانيك.',
-                        style: TextStyle(color: Colors.white),
+                        LanguageService().t('grant_permission_msg'),
+                        style: const TextStyle(color: Colors.white),
                       ),
                       backgroundColor: Colors.redAccent,
                     ),
@@ -1769,6 +1913,94 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               },
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A dedicated widget per category with its own isolated ScrollController.
+/// Guarantees that AnimatedSwitcher never shares controllers during category transitions.
+class _CategoryPageView extends StatefulWidget {
+  final String category;
+  final AudioService audio;
+  final List<Widget> slivers;
+  final VoidCallback onScrollDown;
+  final VoidCallback onScrollUp;
+
+  const _CategoryPageView({
+    super.key,
+    required this.category,
+    required this.audio,
+    required this.slivers,
+    required this.onScrollDown,
+    required this.onScrollUp,
+  });
+
+  @override
+  State<_CategoryPageView> createState() => _CategoryPageViewState();
+}
+
+class _CategoryPageViewState extends State<_CategoryPageView> {
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_handleScroll);
+  }
+
+  void _handleScroll() {
+    if (_scrollController.hasClients &&
+        _scrollController.positions.length == 1 &&
+        _scrollController.offset <= 10) {
+      widget.onScrollUp();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListener<UserScrollNotification>(
+      onNotification: (notification) {
+        if (notification.direction == ScrollDirection.reverse) {
+          if (notification.metrics.pixels > 20) {
+            widget.onScrollDown();
+          }
+        } else if (notification.direction == ScrollDirection.forward) {
+          widget.onScrollUp();
+        }
+        return false;
+      },
+      child: FastScroller(
+        controller: _scrollController,
+        child: RefreshIndicator(
+          color: AppTheme.primaryGreen,
+          backgroundColor: AppTheme.cardColor,
+          displacement: 24,
+          onRefresh: () async {
+            await widget.audio.loadSongs();
+          },
+          child: CustomScrollView(
+            controller: _scrollController,
+            key: PageStorageKey<String>(widget.category),
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            slivers: [
+              ...widget.slivers,
+              const SliverToBoxAdapter(
+                child: SizedBox(height: 110),
+              ),
+            ],
+          ),
         ),
       ),
     );

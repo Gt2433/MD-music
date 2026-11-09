@@ -9,6 +9,10 @@ class ArtworkColorExtractor {
 
   static Color? getCachedColor(int songId) => _cache[songId];
 
+  static void clearCache(int songId) {
+    _cache.remove(songId);
+  }
+
   static Future<Color?> extract(int songId, Uint8List? bytes) async {
     if (bytes == null || bytes.isEmpty) return null;
     if (_cache.containsKey(songId)) return _cache[songId];

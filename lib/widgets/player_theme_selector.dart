@@ -155,12 +155,24 @@ class _PlayerThemeSelectorSheetState extends State<PlayerThemeSelectorSheet> {
 
                   const SizedBox(height: 10),
 
-                  // Theme 2: Vinyl Disc
+                  // Theme 2: Vinyl Sleeve (Disc peeking out behind cover)
                   _buildThemeOptionTile(
                     keyName: 'vinyl',
-                    icon: Icons.album_rounded,
+                    icon: Icons.album_outlined,
                     title: LanguageService.tr('player_theme_vinyl'),
                     description: LanguageService.tr('player_theme_vinyl_desc'),
+                    accent: accent,
+                    isDark: isDark,
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Theme 3: Interactive Large Turntable (Scrubbing turntable)
+                  _buildThemeOptionTile(
+                    keyName: 'turntable',
+                    icon: Icons.album_rounded,
+                    title: LanguageService.tr('player_theme_turntable'),
+                    description: LanguageService.tr('player_theme_turntable_desc'),
                     accent: accent,
                     isDark: isDark,
                   ),

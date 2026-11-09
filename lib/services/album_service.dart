@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:path_provider/path_provider.dart';
+import 'language_service.dart';
 
 class CustomAlbum {
   final String id;
@@ -89,7 +90,7 @@ class AlbumService extends ChangeNotifier {
   Future<CustomAlbum> createAlbum(String name, {List<int>? songIds}) async {
     final album = CustomAlbum(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name.trim().isEmpty ? 'ألبوم جديد' : name.trim(),
+      name: name.trim().isEmpty ? LanguageService().t('new_album_default') : name.trim(),
       songIds: songIds != null ? List.from(songIds) : [],
       createdAt: DateTime.now(),
     );
@@ -182,6 +183,19 @@ class AlbumService extends ChangeNotifier {
     if (idx != -1) {
       _albums[idx].customArtworkPath = imagePath;
       await _save();
+    }
+  }
+
+  Future<void> moveSongToPosition(String albumId, int songId, int targetPosition) async {
+    final idx = _albums.indexWhere((a) => a.id == albumId);
+    if (idx != -1) {
+      final list = _albums[idx].songIds;
+      final oldIndex = list.indexOf(songId);
+      if (oldIndex != -1 && targetPosition >= 0 && targetPosition < list.length) {
+        list.removeAt(oldIndex);
+        list.insert(targetPosition, songId);
+        await _save();
+      }
     }
   }
 

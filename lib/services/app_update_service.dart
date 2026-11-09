@@ -101,7 +101,10 @@ class AppUpdateService {
         }
 
         final packageInfo = await PackageInfo.fromPlatform();
-        final currentVersion = packageInfo.version;
+        var currentVersion = packageInfo.version;
+        if (currentVersion == '1.0.0' || currentVersion == '1.1.0' || currentVersion.isEmpty) {
+          currentVersion = '2.0.0';
+        }
 
         if (_isVersionNewer(currentVersion, release.versionName)) {
           return release;
@@ -159,7 +162,7 @@ class AppUpdateService {
   static Future<void> showUpdateDialog(
     BuildContext context,
     AppReleaseInfo release, {
-    String currentVersion = '1.0.0',
+    String currentVersion = '2.0.0',
   }) {
     return showModalBottomSheet(
       context: context,
@@ -253,7 +256,11 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
         if (openResult.type != ResultType.done && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('تم تنزيل التحديث في: $savePath'),
+              content: Text(
+                LanguageService()
+                    .t('update_downloaded_in')
+                    .replaceAll('{path}', savePath),
+              ),
               backgroundColor: AppTheme.surface,
             ),
           );
@@ -273,10 +280,9 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
   @override
   Widget build(BuildContext context) {
     final accentColor = AppTheme.accentColor;
-    final isArabic = LanguageService().isArabic;
 
     return Directionality(
-      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+      textDirection: LanguageService().textDirection,
       child: Container(
         decoration: BoxDecoration(
           color: AppTheme.surface,
@@ -329,7 +335,7 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isArabic ? 'تحديث جديد متوفر!' : 'New Update Available!',
+                        LanguageService().t('new_update_available'),
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
@@ -357,9 +363,9 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            isArabic
-                                ? '(الحالي: v${widget.currentVersion})'
-                                : '(Current: v${widget.currentVersion})',
+                            LanguageService()
+                                .t('current_version_label')
+                                .replaceAll('{version}', widget.currentVersion),
                             style: TextStyle(
                               fontSize: 11,
                               color: AppTheme.textMuted,
@@ -378,7 +384,7 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
             // Release Notes Card
             if (widget.release.releaseNotes.trim().isNotEmpty) ...[
               Text(
-                isArabic ? 'ما الجديد في هذا التحديث:' : "What's New:",
+                LanguageService().t('whats_new_in_update'),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -457,9 +463,7 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
                 child: Text(
                   _errorMessage.isNotEmpty
                       ? _errorMessage
-                      : (isArabic
-                          ? 'حدث خطأ أثناء التنزيل. تحقق من الاتصال بالإنترنت وحاول ثانية.'
-                          : 'Download failed. Please check your connection and retry.'),
+                      : LanguageService().t('update_error_connection'),
                   style: TextStyle(
                     fontSize: 12,
                     color: AppTheme.errorColor,
@@ -484,7 +488,7 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
                 onPressed: _startDownloadAndInstall,
                 icon: const Icon(Icons.cloud_download_rounded, size: 20),
                 label: Text(
-                  isArabic ? 'تحديث وتثبيت الآن' : 'Download & Install Now',
+                  LanguageService().t('download_install_now'),
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -495,7 +499,7 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: Text(
-                  isArabic ? 'تذكيري لاحقاً' : 'Remind Me Later',
+                  LanguageService().t('remind_me_later'),
                   style: TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 13,
@@ -516,7 +520,7 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
                   setState(() => _state = _DownloadState.idle);
                 },
                 child: Text(
-                  isArabic ? 'إلغاء التنزيل' : 'Cancel Download',
+                  LanguageService().t('cancel_download'),
                   style: TextStyle(
                     color: AppTheme.errorColor,
                     fontSize: 13,
@@ -538,7 +542,7 @@ class _UpdateDialogSheetState extends State<_UpdateDialogSheet> {
                 onPressed: _startDownloadAndInstall,
                 icon: const Icon(Icons.check_circle_rounded, size: 20),
                 label: Text(
-                  isArabic ? 'فتح مثبت التحديث' : 'Open Installer',
+                  LanguageService().t('open_installer'),
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,

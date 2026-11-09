@@ -145,9 +145,9 @@ class BulkSelectionActionBar extends StatelessWidget {
                             const SizedBox(width: 4),
                             Flexible(
                               child: Text(
-                                LanguageService().isArabic
-                                    ? 'تشغيل بالترتيب ($count)'
-                                    : 'Play in Order ($count)',
+                                LanguageService()
+                                    .t('play_in_order_count')
+                                    .replaceAll('{count}', '$count'),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(

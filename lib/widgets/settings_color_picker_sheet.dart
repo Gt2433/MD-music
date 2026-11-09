@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/settings_repository.dart';
+import '../services/language_service.dart';
 
 class LuxuryColorItem {
   final Color color;
@@ -19,6 +20,8 @@ class LuxuryColorItem {
     required this.categoryAr,
     required this.categoryEn,
   });
+
+  String get name => LanguageService().isArabic ? nameAr : nameEn;
 }
 
 class SettingsColorPickerSheet extends StatefulWidget {
@@ -264,7 +267,7 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            isRtl ? 'الثيمات' : 'Themes',
+                            LanguageService().t('themes'),
                             style: TextStyle(
                               color: isDark ? Colors.white : Colors.black87,
                               fontSize: 18,
@@ -306,7 +309,7 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
                     children: [
                       Expanded(
                         child: _buildTabButton(
-                          title: isRtl ? 'الألوان' : 'Palettes',
+                          title: LanguageService().t('palette_curated'),
                           icon: Icons.auto_awesome_rounded,
                           index: 0,
                           accent: accent,
@@ -315,7 +318,7 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
                       ),
                       Expanded(
                         child: _buildTabButton(
-                          title: isRtl ? 'تخصيص' : 'Custom',
+                          title: LanguageService().t('palette_custom_spectrum'),
                           icon: Icons.tune_rounded,
                           index: 1,
                           accent: accent,
@@ -361,7 +364,7 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
                         ),
                         onPressed: () => Navigator.of(context).pop(),
                         child: Text(
-                          isRtl ? 'إلغاء' : 'Cancel',
+                          LanguageService().t('cancel'),
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
                         ),
                       ),
@@ -380,7 +383,7 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
                         ),
                         icon: Icon(Icons.check_rounded, color: buttonTextColor, size: 20),
                         label: Text(
-                          isRtl ? 'تطبيق' : 'Apply',
+                          LanguageService().t('apply'),
                           style: TextStyle(
                             color: buttonTextColor,
                             fontWeight: FontWeight.w800,
@@ -411,7 +414,7 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
                                   ),
                                   const SizedBox(width: 10),
                                   Text(
-                                    isRtl ? 'تم تطبيق المظهر اللوني الجديد بنجاح ✨' : 'Theme color applied ✨',
+                                    LanguageService().t('theme_color_applied_success'),
                                     style: const TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                 ],
@@ -568,7 +571,7 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      isRtl ? 'معاينة المظهر' : 'Theme Preview',
+                      LanguageService().t('theme_preview_title'),
                       style: TextStyle(
                         color: isDark ? Colors.white54 : Colors.black45,
                         fontSize: 11,
@@ -603,36 +606,39 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
           const SizedBox(height: 8),
 
           // Progress Bar with Glowing Slider Thumb
-          Row(
-            children: [
-              Text(
-                '01:45',
-                style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 10.5),
-              ),
-              Expanded(
-                child: SliderTheme(
-                  data: SliderThemeData(
-                    trackHeight: 3.5,
-                    activeTrackColor: accent,
-                    inactiveTrackColor: isDark ? const Color(0xFF222C3A) : const Color(0xFFE2E8F0),
-                    thumbColor: accent,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayColor: accent.withValues(alpha: 0.2),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                  ),
-                  child: Slider(
-                    value: _progress,
-                    onChanged: (val) {
-                      setState(() => _progress = val);
-                    },
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Row(
+              children: [
+                Text(
+                  '01:45',
+                  style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 10.5),
+                ),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderThemeData(
+                      trackHeight: 3.5,
+                      activeTrackColor: accent,
+                      inactiveTrackColor: isDark ? const Color(0xFF222C3A) : const Color(0xFFE2E8F0),
+                      thumbColor: accent,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      overlayColor: accent.withValues(alpha: 0.2),
+                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                    ),
+                    child: Slider(
+                      value: _progress,
+                      onChanged: (val) {
+                        setState(() => _progress = val);
+                      },
+                    ),
                   ),
                 ),
-              ),
-              Text(
-                '03:50',
-                style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 10.5),
-              ),
-            ],
+                Text(
+                  '03:50',
+                  style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 10.5),
+                ),
+              ],
+            ),
           ),
 
           // Interactive Mini Controls
@@ -716,21 +722,21 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       children: [
         _buildPaletteSection(
-          title: isRtl ? 'ألوان راقية' : 'Classics',
+          title: LanguageService().t('classics_palettes'),
           items: royalJewels,
           isDark: isDark,
           isRtl: isRtl,
         ),
         const SizedBox(height: 18),
         _buildPaletteSection(
-          title: isRtl ? 'نيون حيوي' : 'Neon',
+          title: LanguageService().t('neon_palettes'),
           items: cyberNeon,
           isDark: isDark,
           isRtl: isRtl,
         ),
         const SizedBox(height: 18),
         _buildPaletteSection(
-          title: isRtl ? 'درجات طبيعية' : 'Natural',
+          title: LanguageService().t('natural_palettes'),
           items: sunsetEssence,
           isDark: isDark,
           isRtl: isRtl,
@@ -867,7 +873,7 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
             // Name Only (No redundant hex codes)
             Expanded(
               child: Text(
-                isRtl ? item.nameAr : item.nameEn,
+                item.name,
                 style: TextStyle(
                   color: isDark ? Colors.white : Colors.black87,
                   fontSize: 12.5,
@@ -924,7 +930,7 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
 
         // 1. Rainbow Hue Slider - Forced LTR so left = 0° (Red), center-right = 240° (Blue)
         Text(
-          isRtl ? 'اللون' : 'Hue',
+          LanguageService().t('hue_label'),
           style: TextStyle(
             color: isDark ? Colors.white : Colors.black87,
             fontSize: 13,
@@ -983,7 +989,7 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
 
         // 2. Saturation Slider - Forced LTR
         Text(
-          isRtl ? 'التشبع' : 'Saturation',
+          LanguageService().t('saturation_label'),
           style: TextStyle(
             color: isDark ? Colors.white : Colors.black87,
             fontSize: 13,
@@ -1030,7 +1036,7 @@ class _SettingsColorPickerSheetState extends State<SettingsColorPickerSheet>
 
         // 3. Brightness Slider - Forced LTR
         Text(
-          isRtl ? 'السطوع' : 'Brightness',
+          LanguageService().t('brightness_label'),
           style: TextStyle(
             color: isDark ? Colors.white : Colors.black87,
             fontSize: 13,

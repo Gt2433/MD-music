@@ -11,11 +11,17 @@ import 'cinematic_orientation_transition.dart';
 import 'landscape_vinyl_player.dart';
 import 'now_playing_artwork.dart';
 import 'now_playing_vinyl_theme.dart';
+import 'now_playing_vinyl_sleeve_theme.dart';
 import 'player_theme_selector.dart';
 import 'glass_dialog.dart';
 import 'query_artwork_or_fallback.dart';
 import '../services/audio_effects_service.dart';
 import 'audio_effects_sheet.dart';
+import 'lyrics_sheet.dart';
+import 'equalizer_sheet.dart';
+import 'sleep_timer_sheet.dart';
+import '../services/equalizer_service.dart';
+import '../services/sleep_timer_service.dart';
 
 class NowPlayingSheet extends StatefulWidget {
   const NowPlayingSheet({super.key});
@@ -125,8 +131,8 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
         } else {
           final screenSize = MediaQuery.of(context).size;
           final artSize = (screenSize.height < 720)
-              ? 200.0
-              : (screenSize.width - 56).clamp(230.0, 290.0);
+              ? 220.0
+              : (screenSize.width - 48).clamp(260.0, 315.0);
           final isFav = audio.isFavorite(song.id);
           final isPlaying = audio.player.playing;
 
@@ -240,6 +246,39 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                             ),
                           ),
                         ),
+                        AnimatedBuilder(
+                          animation: SleepTimerService(),
+                          builder: (context, _) {
+                            if (!SleepTimerService().isActive) return const SizedBox.shrink();
+                            return GestureDetector(
+                              onTap: () => SleepTimerSheet.show(context),
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.accentColor.withOpacity(0.18),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppTheme.accentColor.withOpacity(0.4)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.bedtime_rounded, color: AppTheme.accentColor, size: 14),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      SleepTimerService().formattedRemaining,
+                                      style: TextStyle(
+                                        color: AppTheme.accentColor,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                         // 3-dots More Options Glass Menu (Landscape Mode, Player Themes, Song Details)
                         IconButton(
                           icon: Icon(
@@ -262,9 +301,18 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                         builder: (context, theme, _) {
                           Widget themeArtwork;
                           switch (theme) {
+                            case 'turntable':
+                              themeArtwork = NowPlayingVinylTurntableTheme(
+                                key: ValueKey('turntable_${song.id}'),
+                                song: song,
+                                audio: audio,
+                                size: artSize,
+                              );
+                              break;
                             case 'vinyl':
-                              themeArtwork = NowPlayingVinylTheme(
-                                key: ValueKey('vinyl_${song.id}'),
+                            case 'vinyl_sleeve':
+                              themeArtwork = NowPlayingVinylSleeveTheme(
+                                key: ValueKey('vinyl_sleeve_${song.id}'),
                                 song: song,
                                 audio: audio,
                                 size: artSize,
@@ -401,14 +449,13 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                               onTap: () => _showQueueModal(context, audio),
                             ),
 
-                            // Center drag pill
-                            Container(
-                              width: 38,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: AppTheme.isDark ? Colors.white12 : Colors.black12,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
+                            // Center: Lyrics Button (🎤 زر كلمات الأغنية)
+                            _buildStandaloneIconButton(
+                              icon: Icons.lyrics_rounded,
+                              color: AppTheme.accentColor,
+                              hasGlow: true,
+                              tooltip: LanguageService.tr('lyrics'),
+                              onTap: () => LyricsSheet.show(context, song),
                             ),
 
                             // Right: Speed & Pitch (زر السرعة على اليمين)
@@ -594,9 +641,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                               color: AppTheme.accentColor, size: 20),
                         ),
                         title: Text(
-                          LanguageService().isArabic
-                              ? 'المؤثرات الصوتية (الصدى)'
-                              : 'Audio Effects (Echo)',
+                          LanguageService().t('audio_effects'),
                           style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 14.5,
@@ -610,11 +655,122 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
+                        trailing: Icon(
+                            LanguageService().isRtl
+                                ? Icons.chevron_left_rounded
+                                : Icons.chevron_right_rounded,
+                            color: AppTheme.textSecondary,
+                            size: 20),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          showAudioEffectsSheet(context);
+                        },
+                      ),
+                      Divider(color: AppTheme.dividerColor, height: 1, indent: 56),
+                      ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentColor.withOpacity(0.14),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.equalizer_rounded,
+                              color: AppTheme.accentColor, size: 20),
+                        ),
+                        title: Text(
+                          LanguageService().t('equalizer_bass_title'),
+                          style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          EqualizerService().enabled
+                              ? LanguageService()
+                                  .t('equalizer_status_on')
+                                  .replaceAll('{preset}', EqualizerService().currentPresetId)
+                              : LanguageService().t('equalizer_status_off'),
+                          style: TextStyle(
+                            color: EqualizerService().enabled
+                                ? AppTheme.accentColor
+                                : AppTheme.textSecondary,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                        trailing: Icon(
+                            LanguageService().isRtl
+                                ? Icons.chevron_left_rounded
+                                : Icons.chevron_right_rounded,
+                            color: AppTheme.textSecondary,
+                            size: 20),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          EqualizerSheet.show(context);
+                        },
+                      ),
+                      Divider(color: AppTheme.dividerColor, height: 1, indent: 56),
+                      ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentColor.withOpacity(0.14),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.bedtime_rounded,
+                              color: AppTheme.accentColor, size: 20),
+                        ),
+                        title: Text(
+                          LanguageService().t('smart_sleep_timer'),
+                          style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          SleepTimerService().isActive
+                              ? SleepTimerService().formattedRemaining
+                              : LanguageService().t('timer_not_set'),
+                          style: TextStyle(
+                            color: SleepTimerService().isActive
+                                ? Colors.greenAccent
+                                : AppTheme.textSecondary,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                        trailing: Icon(
+                            LanguageService().isRtl
+                                ? Icons.chevron_left_rounded
+                                : Icons.chevron_right_rounded,
+                            color: AppTheme.textSecondary,
+                            size: 20),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          SleepTimerSheet.show(context);
+                        },
+                      ),
+                      Divider(color: AppTheme.dividerColor, height: 1, indent: 56),
+                      ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentColor.withOpacity(0.14),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.lyrics_rounded,
+                              color: AppTheme.accentColor, size: 20),
+                        ),
+                        title: Text(
+                          LanguageService.tr('lyrics'),
+                          style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600),
+                        ),
                         trailing: Icon(Icons.chevron_left_rounded,
                             color: AppTheme.textSecondary, size: 20),
                         onTap: () {
                           Navigator.pop(ctx);
-                          showAudioEffectsSheet(context);
+                          LyricsSheet.show(context, song);
                         },
                       ),
                       Divider(color: AppTheme.dividerColor, height: 1, indent: 56),
@@ -650,8 +806,13 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                             color: AppTheme.accentColor.withOpacity(0.14),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Icon(Icons.style_rounded,
-                              color: AppTheme.accentColor, size: 20),
+                          child: Icon(
+                            AppTheme.playerThemeNotifier.value == 'vinyl'
+                                ? Icons.album_rounded
+                                : Icons.album_outlined,
+                            color: AppTheme.accentColor,
+                            size: 20,
+                          ),
                         ),
                         title: Text(
                           LanguageService.tr('select_player_theme'),
@@ -659,6 +820,17 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                               color: AppTheme.textPrimary,
                               fontSize: 14.5,
                               fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          AppTheme.playerThemeNotifier.value == 'turntable'
+                              ? LanguageService.tr('player_theme_turntable')
+                              : (AppTheme.playerThemeNotifier.value == 'vinyl'
+                                  ? LanguageService.tr('player_theme_vinyl')
+                                  : LanguageService.tr('player_theme_default')),
+                          style: TextStyle(
+                            color: AppTheme.accentColor.withOpacity(0.85),
+                            fontSize: 11.5,
+                          ),
                         ),
                         trailing: Icon(Icons.chevron_left_rounded,
                             color: AppTheme.textSecondary, size: 20),
@@ -1001,6 +1173,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                                   ],
                                 ),
                               ),
+
                             ],
                           ),
                         ),
@@ -1090,9 +1263,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                                     Icon(Icons.repeat_rounded, size: 12, color: AppTheme.accentColor),
                                     const SizedBox(width: 4),
                                     Text(
-                                      LanguageService().isArabic
-                                          ? 'ألبوم مؤقت مكرر'
-                                          : 'Looping Temp Album',
+                                      LanguageService().t('temp_loop_album'),
                                       style: TextStyle(
                                         color: AppTheme.accentColor,
                                         fontSize: 10.5,
@@ -1146,7 +1317,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                               QueryArtworkOrFallback(
                                 id: itemSong.id,
                                 size: 44,
-                                borderRadius: 10,
+                                borderRadius: AppTheme.artworkShapeNotifier.value == 'circle' ? 22 : 10,
                               ),
                             ],
                           ),
@@ -1171,7 +1342,30 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                           ),
                           trailing: isCurrent
                               ? Icon(Icons.equalizer_rounded, color: AppTheme.accentColor, size: 22)
-                              : null,
+                              : (audio.isNextSong(itemSong.id)
+                                  ? Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF10B981).withValues(alpha: 0.16),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.playlist_play_rounded, size: 14, color: Color(0xFF10B981)),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            LanguageService.tr('play_next'),
+                                            style: const TextStyle(
+                                              color: Color(0xFF10B981),
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : null),
                           onTap: () {
                             audio.playSong(itemSong, playlist: audio.currentPlaylist);
                           },
@@ -1613,80 +1807,83 @@ class _InteractiveProgressBarState extends State<_InteractiveProgressBar> {
             ? widget.audio.formatDuration(currentMs.round())
             : widget.audio.formatDuration(position.inMilliseconds);
 
-        return Column(
-          children: [
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                activeTrackColor: AppTheme.accentColor,
-                inactiveTrackColor: (AppTheme.isDark ? Colors.white : Colors.black).withOpacity(0.12),
-                thumbColor: AppTheme.accentColor,
-                trackHeight: _isDragging ? 5.5 : 3.8,
-                thumbShape: RoundSliderThumbShape(
-                  enabledThumbRadius: _isDragging ? 10.0 : 6.5,
-                  elevation: _isDragging ? 6 : 2,
-                  pressedElevation: 8,
+        return Directionality(
+          textDirection: TextDirection.ltr,
+          child: Column(
+            children: [
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  activeTrackColor: AppTheme.accentColor,
+                  inactiveTrackColor: (AppTheme.isDark ? Colors.white : Colors.black).withOpacity(0.12),
+                  thumbColor: AppTheme.accentColor,
+                  trackHeight: _isDragging ? 5.5 : 3.8,
+                  thumbShape: RoundSliderThumbShape(
+                    enabledThumbRadius: _isDragging ? 10.0 : 6.5,
+                    elevation: _isDragging ? 6 : 2,
+                    pressedElevation: 8,
+                  ),
+                  overlayShape: RoundSliderOverlayShape(
+                    overlayRadius: _isDragging ? 22.0 : 14.0,
+                  ),
+                  overlayColor: AppTheme.accentColor.withValues(alpha: 0.25),
                 ),
-                overlayShape: RoundSliderOverlayShape(
-                  overlayRadius: _isDragging ? 22.0 : 14.0,
-                ),
-                overlayColor: AppTheme.accentColor.withValues(alpha: 0.25),
-              ),
-              child: Slider(
-                value: currentMs,
-                min: 0.0,
-                max: effectiveMaxMs,
-                onChangeStart: (val) {
-                  setState(() {
-                    _isDragging = true;
-                    _dragPositionMs = val;
-                  });
-                  widget.audio.setScrubbingMuted(true);
-                },
-                onChanged: (val) {
-                  setState(() {
-                    _dragPositionMs = val;
-                  });
-                },
-                onChangeEnd: (val) async {
-                  final targetMs = val.round();
-                  await widget.audio.seek(Duration(milliseconds: targetMs));
-                  await widget.audio.setScrubbingMuted(false);
-                  if (mounted) {
+                child: Slider(
+                  value: currentMs,
+                  min: 0.0,
+                  max: effectiveMaxMs,
+                  onChangeStart: (val) {
                     setState(() {
-                      _isDragging = false;
+                      _isDragging = true;
+                      _dragPositionMs = val;
                     });
-                  }
-                },
+                    widget.audio.setScrubbingMuted(true);
+                  },
+                  onChanged: (val) {
+                    setState(() {
+                      _dragPositionMs = val;
+                    });
+                  },
+                  onChangeEnd: (val) async {
+                    final targetMs = val.round();
+                    await widget.audio.seek(Duration(milliseconds: targetMs));
+                    await widget.audio.setScrubbingMuted(false);
+                    if (mounted) {
+                      setState(() {
+                        _isDragging = false;
+                      });
+                    }
+                  },
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 150),
-                    style: TextStyle(
-                      color: _isDragging
-                          ? AppTheme.accentColor
-                          : (AppTheme.isDark ? Colors.white.withOpacity(0.55) : AppTheme.textSecondary),
-                      fontSize: _isDragging ? 13 : 12,
-                      fontWeight: _isDragging ? FontWeight.bold : FontWeight.w500,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 150),
+                      style: TextStyle(
+                        color: _isDragging
+                            ? AppTheme.accentColor
+                            : (AppTheme.isDark ? Colors.white.withOpacity(0.55) : AppTheme.textSecondary),
+                        fontSize: _isDragging ? 13 : 12,
+                        fontWeight: _isDragging ? FontWeight.bold : FontWeight.w500,
+                      ),
+                      child: Text(displayCurrentTime),
                     ),
-                    child: Text(displayCurrentTime),
-                  ),
-                  Text(
-                    widget.audio.formatDuration(total.inMilliseconds),
-                    style: TextStyle(
-                      color: AppTheme.isDark ? Colors.white.withOpacity(0.55) : AppTheme.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                    Text(
+                      widget.audio.formatDuration(total.inMilliseconds),
+                      style: TextStyle(
+                        color: AppTheme.isDark ? Colors.white.withOpacity(0.55) : AppTheme.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
@@ -2070,7 +2267,7 @@ class _BackgroundPlaylistView extends StatelessWidget {
             child: Row(
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppTheme.artworkShapeNotifier.value == 'circle' ? 25 : 10),
                   child: SizedBox(
                     width: 50,
                     height: 50,
@@ -2078,6 +2275,7 @@ class _BackgroundPlaylistView extends StatelessWidget {
                       id: song.id,
                       type: ArtworkType.AUDIO,
                       size: 50,
+                      borderRadius: AppTheme.artworkShapeNotifier.value == 'circle' ? 25 : 10,
                     ),
                   ),
                 ),

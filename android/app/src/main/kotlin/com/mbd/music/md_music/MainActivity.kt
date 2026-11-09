@@ -24,6 +24,9 @@ import android.provider.Settings
 import android.content.pm.PackageManager
 import android.media.audiofx.Equalizer
 import android.media.audiofx.BassBoost
+import android.media.audiofx.Virtualizer
+import android.media.audiofx.PresetReverb
+import android.media.audiofx.DynamicsProcessing
 import android.view.Display
 import android.view.KeyEvent
 import android.view.WindowManager
@@ -46,6 +49,9 @@ class MainActivity : AudioServiceActivity() {
     private var volumeChannel: MethodChannel? = null
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
+    private var virtualizer: Virtualizer? = null
+    private var presetReverb: PresetReverb? = null
+    private var dynamicsProcessing: DynamicsProcessing? = null
     private var currentSessionId: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -241,7 +247,7 @@ class MainActivity : AudioServiceActivity() {
                 "getPackageInfo" -> {
                     try {
                         val pInfo = packageManager.getPackageInfo(packageName, 0)
-                        val vName = pInfo.versionName ?: "1.0.0"
+                        val vName = pInfo.versionName ?: "1.1.0"
                         val vCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                             pInfo.longVersionCode
                         } else {
@@ -254,7 +260,7 @@ class MainActivity : AudioServiceActivity() {
                             "packageName" to packageName
                         ))
                     } catch (e: Exception) {
-                        result.success(mapOf("versionName" to "1.0.0", "versionCode" to 1L, "packageName" to packageName))
+                        result.success(mapOf("versionName" to "1.1.0", "versionCode" to 2L, "packageName" to packageName))
                     }
                 }
                 "attachEqualizer" -> {
@@ -266,8 +272,12 @@ class MainActivity : AudioServiceActivity() {
                         if (equalizer != null && currentSessionId != sessionId) {
                             try { equalizer?.release() } catch (_: Exception) {}
                             try { bassBoost?.release() } catch (_: Exception) {}
+                            try { virtualizer?.release() } catch (_: Exception) {}
+                            try { presetReverb?.release() } catch (_: Exception) {}
                             equalizer = null
                             bassBoost = null
+                            virtualizer = null
+                            presetReverb = null
                         }
                         if (sessionId > 0 && equalizer == null) {
                             currentSessionId = sessionId
@@ -329,6 +339,162 @@ class MainActivity : AudioServiceActivity() {
                         result.success(true)
                     } catch (e: Exception) {
                         result.success(false)
+                    }
+                }
+                "setSpatial8D" -> {
+                    val sessionId = call.argument<Int>("sessionId") ?: currentSessionId
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    val strength = call.argument<Int>("strength") ?: 1000
+                    try {
+                        if (sessionId > 0) {
+                            if (virtualizer == null || currentSessionId != sessionId) {
+                                try { virtualizer?.release() } catch (_: Exception) {}
+                                virtualizer = Virtualizer(0, sessionId)
+                            }
+                            if (presetReverb == null || currentSessionId != sessionId) {
+                                try { presetReverb?.release() } catch (_: Exception) {}
+                                presetReverb = PresetReverb(0, sessionId)
+                            }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                if (dynamicsProcessing == null || currentSessionId != sessionId) {
+                                    try { dynamicsProcessing?.release() } catch (_: Exception) {}
+                                    val builder = DynamicsProcessing.Config.Builder(
+                                        DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
+                                        2, false, 0, false, 0, false, 0, false
+                                    )
+                                    dynamicsProcessing = DynamicsProcessing(0, sessionId, builder.build())
+                                }
+                            }
+                            currentSessionId = sessionId
+                        }
+
+                        if (virtualizer != null) {
+                            virtualizer?.enabled = enabled
+                            if (enabled && virtualizer?.strengthSupported == true) {
+                                virtualizer?.setStrength(strength.coerceIn(0, 1000).toShort())
+                                try {
+                                    virtualizer?.forceVirtualizationMode(Virtualizer.VIRTUALIZATION_MODE_BINAURAL)
+                                } catch (_: Exception) {}
+                            }
+                        }
+
+                        if (presetReverb != null) {
+                            presetReverb?.enabled = enabled
+                            if (enabled) {
+                                presetReverb?.preset = PresetReverb.PRESET_LARGEHALL
+                            }
+                        }
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && dynamicsProcessing != null) {
+                            dynamicsProcessing?.enabled = enabled
+                            if (!enabled) {
+                                try {
+                                    val ch0 = dynamicsProcessing?.getChannelByChannelIndex(0)
+                                    ch0?.inputGain = 0f
+                                    if (ch0 != null) dynamicsProcessing?.setChannelTo(0, ch0)
+
+                                    val ch1 = dynamicsProcessing?.getChannelByChannelIndex(1)
+                                    ch1?.inputGain = 0f
+                                    if (ch1 != null) dynamicsProcessing?.setChannelTo(1, ch1)
+                                } catch (_: Exception) {}
+                            }
+                        }
+
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                "setStereoPan" -> {
+                    val pan = (call.argument<Number>("pan")?.toDouble() ?: 0.0).toFloat().coerceIn(-1.0f, 1.0f)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && dynamicsProcessing != null) {
+                        try {
+                            // Equal power panning curve in decibels (dB):
+                            // pan: -1.0 (Full Left)  -> Left:  0 dB, Right: -22 dB
+                            // pan:  0.0 (Center)     -> Left:  0 dB, Right:   0 dB
+                            // pan: +1.0 (Full Right) -> Left: -22 dB, Right:   0 dB
+                            val leftDb = if (pan <= 0f) 0f else (-22f * pan)
+                            val rightDb = if (pan >= 0f) 0f else (22f * pan)
+
+                            val ch0 = dynamicsProcessing?.getChannelByChannelIndex(0)
+                            ch0?.inputGain = leftDb
+                            if (ch0 != null) dynamicsProcessing?.setChannelTo(0, ch0)
+
+                            val ch1 = dynamicsProcessing?.getChannelByChannelIndex(1)
+                            ch1?.inputGain = rightDb
+                            if (ch1 != null) dynamicsProcessing?.setChannelTo(1, ch1)
+
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.success(false)
+                        }
+                    } else {
+                        result.success(false)
+                    }
+                }
+                "setKaraokeMode" -> {
+                    val sessionId = call.argument<Int>("sessionId") ?: currentSessionId
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    val mode = call.argument<String>("mode") ?: "karaoke"
+                    try {
+                        if (sessionId > 0) {
+                            if (virtualizer == null || currentSessionId != sessionId) {
+                                try { virtualizer?.release() } catch (_: Exception) {}
+                                virtualizer = Virtualizer(0, sessionId)
+                            }
+                            if (presetReverb != null) {
+                                presetReverb?.enabled = false
+                            }
+                            currentSessionId = sessionId
+                        }
+
+                        if (virtualizer != null) {
+                            if (enabled && mode == "karaoke") {
+                                virtualizer?.enabled = true
+                                if (virtualizer?.strengthSupported == true) {
+                                    virtualizer?.setStrength(1000.toShort())
+                                    try {
+                                        virtualizer?.forceVirtualizationMode(Virtualizer.VIRTUALIZATION_MODE_BINAURAL)
+                                    } catch (_: Exception) {}
+                                }
+                            } else {
+                                virtualizer?.enabled = false
+                            }
+                        }
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && dynamicsProcessing != null) {
+                            try {
+                                val ch0 = dynamicsProcessing?.getChannelByChannelIndex(0)
+                                ch0?.inputGain = 0f
+                                if (ch0 != null) dynamicsProcessing?.setChannelTo(0, ch0)
+
+                                val ch1 = dynamicsProcessing?.getChannelByChannelIndex(1)
+                                ch1?.inputGain = 0f
+                                if (ch1 != null) dynamicsProcessing?.setChannelTo(1, ch1)
+                            } catch (_: Exception) {}
+                        }
+
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                "saveDownloadedAudio" -> {
+                    val tempPath = call.argument<String>("tempPath")
+                    val title = call.argument<String>("title") ?: "Downloaded Track"
+                    val artist = call.argument<String>("artist") ?: "MD Music"
+                    val fileName = call.argument<String>("fileName") ?: "$title.m4a"
+                    val mimeType = call.argument<String>("mimeType") ?: "audio/mp4"
+
+                    if (tempPath != null && File(tempPath).exists()) {
+                        Thread {
+                            val saved = saveAudioToMediaStore(tempPath, title, artist, fileName, mimeType)
+                            runOnUiThread {
+                                result.success(saved)
+                            }
+                        }.start()
+                    } else {
+                        result.error("FILE_NOT_FOUND", "Temp file not found: $tempPath", null)
                     }
                 }
                 else -> {
@@ -502,6 +668,84 @@ class MainActivity : AudioServiceActivity() {
                 }
             }
         }.start()
+    }
+
+    private fun saveAudioToMediaStore(
+        tempPath: String,
+        title: String,
+        artist: String,
+        fileName: String,
+        mimeType: String
+    ): String? {
+        val srcFile = File(tempPath)
+        if (!srcFile.exists()) return null
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
+                    put(MediaStore.Audio.Media.TITLE, title)
+                    put(MediaStore.Audio.Media.ARTIST, artist)
+                    put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
+                    put(MediaStore.Audio.Media.IS_MUSIC, 1)
+                    put(MediaStore.Audio.Media.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/MDMusic")
+                    put(MediaStore.Audio.Media.IS_PENDING, 1)
+                }
+
+                val insertedUri = contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+                if (insertedUri != null) {
+                    val inStream = FileInputStream(srcFile)
+                    val outStream = contentResolver.openOutputStream(insertedUri, "w")
+                    if (outStream != null) {
+                        inStream.use { input ->
+                            outStream.use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        values.clear()
+                        values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+                        contentResolver.update(insertedUri, values, null, null)
+
+                        try { srcFile.delete() } catch (_: Exception) {}
+
+                        MediaScannerConnection.scanFile(
+                            applicationContext,
+                            arrayOf(insertedUri.toString()),
+                            arrayOf(mimeType),
+                            null
+                        )
+                        return insertedUri.toString()
+                    }
+                }
+            }
+
+            val musicDir = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
+                "MDMusic"
+            )
+            if (!musicDir.exists()) musicDir.mkdirs()
+            val destFile = File(musicDir, fileName)
+
+            val inStream = FileInputStream(srcFile)
+            val outStream = FileOutputStream(destFile)
+            inStream.use { input ->
+                outStream.use { output ->
+                    input.copyTo(output)
+                }
+            }
+            try { srcFile.delete() } catch (_: Exception) {}
+
+            MediaScannerConnection.scanFile(
+                applicationContext,
+                arrayOf(destFile.absolutePath),
+                arrayOf(mimeType),
+                null
+            )
+            return destFile.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
     }
 
     private fun trimAudioFile(srcPath: String, dstPath: String, startMs: Long, endMs: Long): Boolean {

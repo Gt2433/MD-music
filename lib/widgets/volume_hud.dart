@@ -1,8 +1,12 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/volume_service.dart';
 import '../theme/app_theme.dart';
 
+/// Ultra-smooth, minimalist floating capsule volume indicator (HUD)
+/// Displays on hardware/software volume adjustment with refined glassmorphism,
+/// smooth appearance/disappearance animations, and animated progress interpolation.
 class VolumeHud extends StatefulWidget {
   const VolumeHud({super.key});
 
@@ -13,6 +17,7 @@ class VolumeHud extends StatefulWidget {
 class _VolumeHudState extends State<VolumeHud> with SingleTickerProviderStateMixin {
   late final AnimationController _animController;
   late final Animation<double> _slideAnimation;
+  late final Animation<double> _scaleAnimation;
   late final Animation<double> _fadeAnimation;
 
   double _dragOffsetY = 0.0;
@@ -22,18 +27,29 @@ class _VolumeHudState extends State<VolumeHud> with SingleTickerProviderStateMix
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 280),
-      reverseDuration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 320),
+      reverseDuration: const Duration(milliseconds: 240),
     );
 
-    _slideAnimation = Tween<double>(begin: -1.2, end: 0.0).animate(
+    // Smooth subtle slide from top (-28px to 0)
+    _slideAnimation = Tween<double>(begin: -28.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _animController,
-        curve: Curves.easeOutBack,
+        curve: Curves.easeOutCubic,
         reverseCurve: Curves.easeInCubic,
       ),
     );
 
+    // Subtle scale expansion for a natural, tactile pop (0.86 to 1.0)
+    _scaleAnimation = Tween<double>(begin: 0.86, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      ),
+    );
+
+    // Soft opacity fade
     _fadeAnimation = CurvedAnimation(
       parent: _animController,
       curve: Curves.easeOut,
@@ -101,8 +117,9 @@ class _VolumeHudState extends State<VolumeHud> with SingleTickerProviderStateMix
               volumeIcon = Icons.volume_up_rounded;
             }
 
-            final hudWidth = (screenWidth - 36).clamp(300.0, 420.0);
-            final targetTop = (topPadding > 0 ? topPadding + 8 : 24.0);
+            // Compact, elegant capsule width
+            final capsuleWidth = (screenWidth * 0.60).clamp(215.0, 255.0);
+            final targetTop = (topPadding > 0 ? topPadding + 10.0 : 22.0);
 
             return IgnorePointer(
               ignoring: !isVisible,
@@ -113,15 +130,20 @@ class _VolumeHudState extends State<VolumeHud> with SingleTickerProviderStateMix
                     return const SizedBox.shrink();
                   }
 
-                  // Slide down translation + interactive upward swipe drag translation
-                  final baseSlideY = _slideAnimation.value * (targetTop + 100);
-                  final effectiveTranslateY = baseSlideY + _dragOffsetY;
+                  final effectiveTranslateY = _slideAnimation.value + _dragOffsetY;
+                  final scale = _scaleAnimation.value;
+                  final opacity = (_fadeAnimation.value *
+                          (1.0 - (_dragOffsetY.abs() / 80.0).clamp(0.0, 0.95)))
+                      .clamp(0.0, 1.0);
 
                   return Transform.translate(
                     offset: Offset(0, effectiveTranslateY),
-                    child: Opacity(
-                      opacity: (_fadeAnimation.value * (1.0 - (_dragOffsetY.abs() / 120.0).clamp(0.0, 0.95))).clamp(0.0, 1.0),
-                      child: child,
+                    child: Transform.scale(
+                      scale: scale,
+                      child: Opacity(
+                        opacity: opacity,
+                        child: child,
+                      ),
                     ),
                   );
                 },
@@ -134,200 +156,191 @@ class _VolumeHudState extends State<VolumeHud> with SingleTickerProviderStateMix
                       child: Material(
                         color: Colors.transparent,
                         child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        // Swipe / Drag upwards to dismiss
-                        onVerticalDragUpdate: (details) {
-                          if (details.delta.dy < 0 || _dragOffsetY < 0) {
-                            setState(() {
-                              _dragOffsetY = (_dragOffsetY + details.delta.dy).clamp(-180.0, 0.0);
-                            });
-                            // If dragged up by more than 22 pixels, dismiss immediately
-                            if (_dragOffsetY <= -22) {
-                              _dismissUpwards();
+                          behavior: HitTestBehavior.opaque,
+                          // Swipe up to dismiss instantly
+                          onVerticalDragUpdate: (details) {
+                            if (details.delta.dy < 0 || _dragOffsetY < 0) {
+                              setState(() {
+                                _dragOffsetY =
+                                    (_dragOffsetY + details.delta.dy).clamp(-100.0, 0.0);
+                              });
+                              if (_dragOffsetY <= -18) {
+                                _dismissUpwards();
+                              }
                             }
-                          }
-                        },
-                        onVerticalDragEnd: (details) {
-                          if (details.primaryVelocity != null && details.primaryVelocity! < -80) {
-                            _dismissUpwards();
-                          } else if (_dragOffsetY <= -15) {
-                            _dismissUpwards();
-                          } else {
-                            // Bounce back if user didn't pull up far enough
-                            setState(() {
-                              _dragOffsetY = 0.0;
-                            });
-                          }
-                        },
-                        child: Container(
-                          width: hudWidth,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(26),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(AppTheme.isDark ? 0.60 : 0.18),
-                                blurRadius: 32,
-                                offset: const Offset(0, 14),
-                              ),
-                              BoxShadow(
-                                color: accentColor.withOpacity(0.16),
-                                blurRadius: 24,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(26),
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-                              child: Container(
-                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-                                decoration: BoxDecoration(
-                                  // Luxury frosted glass blurry tint
-                                  color: AppTheme.isDark
-                                      ? const Color(0xFF0C1712).withOpacity(0.82)
-                                      : Colors.white.withOpacity(0.85),
-                                  borderRadius: BorderRadius.circular(26),
-                                  border: Border.all(
-                                    color: (AppTheme.isDark ? Colors.white : Colors.black).withOpacity(0.14),
-                                    width: 1.2,
-                                  ),
+                          },
+                          onVerticalDragEnd: (details) {
+                            if (details.primaryVelocity != null &&
+                                details.primaryVelocity! < -60) {
+                              _dismissUpwards();
+                            } else if (_dragOffsetY <= -14) {
+                              _dismissUpwards();
+                            } else {
+                              setState(() {
+                                _dragOffsetY = 0.0;
+                              });
+                            }
+                          },
+                          child: Container(
+                            width: capsuleWidth,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(22),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(AppTheme.isDark ? 0.42 : 0.12),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 7),
                                 ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Top Swipe-Up Dismiss Handle Indicator
-                                    InkWell(
-                                      onTap: _dismissUpwards,
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 20),
-                                        child: Container(
-                                          width: 38,
-                                          height: 4,
-                                          decoration: BoxDecoration(
-                                            color: (AppTheme.isDark ? Colors.white : Colors.black).withOpacity(0.24),
-                                            borderRadius: BorderRadius.circular(2),
+                                BoxShadow(
+                                  color: accentColor.withOpacity(0.16),
+                                  blurRadius: 14,
+                                  spreadRadius: -2,
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(22),
+                              child: BackdropFilter(
+                                filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 13),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.isDark
+                                        ? const Color(0xDF0D1612)
+                                        : Colors.white.withOpacity(0.92),
+                                    borderRadius: BorderRadius.circular(22),
+                                    border: Border.all(
+                                      color: (AppTheme.isDark ? Colors.white : Colors.black)
+                                          .withOpacity(0.12),
+                                      width: 1.0,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      // 1. Interactive Speaker Icon with Micro-animation
+                                      GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () {
+                                          HapticFeedback.lightImpact();
+                                          volumeService.toggleMute();
+                                        },
+                                        child: SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: Center(
+                                            child: AnimatedSwitcher(
+                                              duration: const Duration(milliseconds: 180),
+                                              transitionBuilder: (child, anim) =>
+                                                  ScaleTransition(scale: anim, child: child),
+                                              child: Icon(
+                                                volumeIcon,
+                                                key: ValueKey<IconData>(volumeIcon),
+                                                color: accentColor,
+                                                size: 19,
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 6),
+                                      const SizedBox(width: 10),
 
-                                    // Content Row: Speaker Icon, Interactive Track, Percentage Text
-                                    Row(
-                                      children: [
-                                        // Speaker Icon Button (Tap to toggle mute)
-                                        InkWell(
-                                          onTap: () => volumeService.toggleMute(),
-                                          borderRadius: BorderRadius.circular(14),
-                                          child: Container(
-                                            width: 40,
-                                            height: 40,
-                                            decoration: BoxDecoration(
-                                              color: accentColor.withOpacity(0.14),
-                                              borderRadius: BorderRadius.circular(14),
-                                              border: Border.all(
-                                                color: accentColor.withOpacity(0.28),
-                                                width: 1,
-                                              ),
-                                            ),
-                                            child: Center(
-                                              child: Icon(
-                                                volumeIcon,
-                                                color: accentColor,
-                                                size: 22,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-
-                                        // Wide Interactive Volume Bar (Snap to steps on drag)
-                                        Expanded(
-                                          child: LayoutBuilder(
-                                            builder: (context, trackConstraints) {
-                                              return GestureDetector(
-                                                behavior: HitTestBehavior.opaque,
-                                                onHorizontalDragUpdate: (details) {
-                                                  final trackWidth = trackConstraints.maxWidth;
-                                                  if (trackWidth > 0) {
-                                                    final deltaFraction = details.delta.dx / trackWidth;
-                                                    final rawNext = (volume + deltaFraction).clamp(0.0, 1.0);
-                                                    volumeService.setVolume(rawNext);
-                                                  }
-                                                },
-                                                onTapDown: (details) {
-                                                  final trackWidth = trackConstraints.maxWidth;
-                                                  if (trackWidth > 0) {
-                                                    final fraction = (details.localPosition.dx / trackWidth).clamp(0.0, 1.0);
-                                                    volumeService.setVolume(fraction);
-                                                  }
-                                                },
+                                      // 2. Smooth Gliding Interactive Volume Bar
+                                      Expanded(
+                                        child: LayoutBuilder(
+                                          builder: (context, trackConstraints) {
+                                            return GestureDetector(
+                                              behavior: HitTestBehavior.opaque,
+                                              onHorizontalDragUpdate: (details) {
+                                                final trackWidth = trackConstraints.maxWidth;
+                                                if (trackWidth > 0) {
+                                                  final deltaFraction =
+                                                      details.delta.dx / trackWidth;
+                                                  final rawNext =
+                                                      (volume + deltaFraction).clamp(0.0, 1.0);
+                                                  volumeService.setVolume(rawNext);
+                                                }
+                                              },
+                                              onTapDown: (details) {
+                                                final trackWidth = trackConstraints.maxWidth;
+                                                if (trackWidth > 0) {
+                                                  final fraction = (details.localPosition.dx /
+                                                          trackWidth)
+                                                      .clamp(0.0, 1.0);
+                                                  volumeService.setVolume(fraction);
+                                                }
+                                              },
+                                              child: Container(
+                                                height: 34,
+                                                alignment: Alignment.center,
                                                 child: Container(
-                                                  height: 36,
-                                                  alignment: Alignment.center,
-                                                  child: Container(
-                                                    height: 10,
-                                                    decoration: BoxDecoration(
-                                                      color: (AppTheme.isDark ? const Color(0xFF1E2C24) : Colors.black.withOpacity(0.08)),
-                                                      borderRadius: BorderRadius.circular(10),
-                                                      border: Border.all(
-                                                        color: (AppTheme.isDark ? Colors.white : Colors.black).withOpacity(0.08),
-                                                        width: 0.8,
-                                                      ),
+                                                  height: 6.0,
+                                                  decoration: BoxDecoration(
+                                                    color: (AppTheme.isDark
+                                                        ? Colors.white.withOpacity(0.12)
+                                                        : Colors.black.withOpacity(0.08)),
+                                                    borderRadius: BorderRadius.circular(3),
+                                                  ),
+                                                  child: TweenAnimationBuilder<double>(
+                                                    tween: Tween<double>(
+                                                      begin: 0.0,
+                                                      end: volume.clamp(0.0, 1.0),
                                                     ),
-                                                    child: Stack(
-                                                      children: [
-                                                        // Active progress fill
-                                                        FractionallySizedBox(
-                                                          widthFactor: volume.clamp(0.0, 1.0),
-                                                          child: Container(
-                                                            decoration: BoxDecoration(
-                                                              gradient: LinearGradient(
-                                                                colors: [
-                                                                  accentColor,
-                                                                  accentColor.withOpacity(0.85),
+                                                    duration: const Duration(milliseconds: 160),
+                                                    curve: Curves.easeOutCubic,
+                                                    builder: (context, animVolume, _) {
+                                                      return Stack(
+                                                        children: [
+                                                          FractionallySizedBox(
+                                                            widthFactor: animVolume,
+                                                            child: Container(
+                                                              decoration: BoxDecoration(
+                                                                gradient: LinearGradient(
+                                                                  colors: [
+                                                                    accentColor,
+                                                                    accentColor.withOpacity(0.85),
+                                                                  ],
+                                                                ),
+                                                                borderRadius:
+                                                                    BorderRadius.circular(3),
+                                                                boxShadow: [
+                                                                  BoxShadow(
+                                                                    color: accentColor
+                                                                        .withOpacity(0.40),
+                                                                    blurRadius: 6,
+                                                                  ),
                                                                 ],
                                                               ),
-                                                              borderRadius: BorderRadius.circular(10),
-                                                              boxShadow: [
-                                                                BoxShadow(
-                                                                  color: accentColor.withOpacity(0.45),
-                                                                  blurRadius: 8,
-                                                                ),
-                                                              ],
                                                             ),
                                                           ),
-                                                        ),
-                                                      ],
-                                                    ),
+                                                        ],
+                                                      );
+                                                    },
                                                   ),
                                                 ),
-                                              );
-                                            },
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+
+                                      // 3. Crisp Percentage Text
+                                      SizedBox(
+                                        width: 36,
+                                        child: Text(
+                                          '$percentage%',
+                                          textAlign: TextAlign.end,
+                                          style: TextStyle(
+                                            color: accentColor,
+                                            fontSize: 13.0,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: -0.3,
                                           ),
                                         ),
-
-                                        const SizedBox(width: 12),
-
-                                        // Large, Bold, Clear Percentage Text
-                                        SizedBox(
-                                          width: 48,
-                                          child: Text(
-                                            '$percentage%',
-                                            textAlign: TextAlign.end,
-                                            style: TextStyle(
-                                              color: accentColor,
-                                              fontSize: 15.5,
-                                              fontWeight: FontWeight.w900,
-                                              letterSpacing: -0.3,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -337,7 +350,6 @@ class _VolumeHudState extends State<VolumeHud> with SingleTickerProviderStateMix
                     ),
                   ),
                 ),
-              ),
               ),
             );
           },

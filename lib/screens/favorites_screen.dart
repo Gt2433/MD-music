@@ -4,6 +4,7 @@ import '../services/language_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/now_playing_sheet.dart';
 import '../widgets/song_tile.dart';
+import '../widgets/staggered_song_item.dart';
 
 class FavoritesScreen extends StatelessWidget {
   const FavoritesScreen({super.key});
@@ -13,7 +14,7 @@ class FavoritesScreen extends StatelessWidget {
     final audio = AudioService();
 
     return AnimatedBuilder(
-      animation: audio,
+      animation: Listenable.merge([audio, AppTheme.listDensityNotifier]),
       builder: (context, _) {
         final favSongs = audio.allSongs.where((s) => audio.favoriteIds.contains(s.id)).toList();
 
@@ -52,9 +53,12 @@ class FavoritesScreen extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(22),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF141A22),
+                            color: AppTheme.isDark ? const Color(0xFF141A22) : const Color(0xFFFFEBEE),
                             shape: BoxShape.circle,
-                            border: Border.all(color: const Color(0xFF261A22), width: 1),
+                            border: Border.all(
+                              color: AppTheme.isDark ? const Color(0xFF261A22) : const Color(0xFFFFCDD2),
+                              width: 1,
+                            ),
                           ),
                           child: const Icon(Icons.favorite_border_rounded, color: Color(0xFFFF5252), size: 48),
                         ),
@@ -131,14 +135,42 @@ class FavoritesScreen extends StatelessWidget {
 
                     // List of Favorites
                     Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 110),
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: favSongs.length,
-                        itemBuilder: (context, index) {
-                          return SongTile(song: favSongs[index], playlist: favSongs);
-                        },
-                      ),
+                      child: AppTheme.listDensityNotifier.value == 'grid'
+                          ? GridView.builder(
+                              padding: const EdgeInsets.fromLTRB(12, 4, 12, 110),
+                              physics: const BouncingScrollPhysics(),
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 10,
+                                mainAxisSpacing: 10,
+                                childAspectRatio: 0.74,
+                              ),
+                              itemCount: favSongs.length,
+                              itemBuilder: (context, index) {
+                                return StaggeredSongItem(
+                                  index: index,
+                                  child: SongGridTile(
+                                    song: favSongs[index],
+                                    playlist: favSongs,
+                                  ),
+                                );
+                              },
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.only(bottom: 110),
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: favSongs.length,
+                              itemBuilder: (context, index) {
+                                return StaggeredSongItem(
+                                  index: index,
+                                  child: SongTile(
+                                    song: favSongs[index],
+                                    playlist: favSongs,
+                                    isCompact: AppTheme.listDensityNotifier.value == 'compact',
+                                  ),
+                                );
+                              },
+                              ),
                     ),
                   ],
                 ),

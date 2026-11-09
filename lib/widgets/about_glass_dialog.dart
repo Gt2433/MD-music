@@ -9,8 +9,8 @@ import '../services/language_service.dart';
 /// name, version, developer info (Mohammed Bahayou), and official social links.
 Future<void> showAboutGlassDialog(
   BuildContext context, {
-  String versionName = '1.0.0',
-  int versionCode = 1,
+  String versionName = '2.0.0',
+  int versionCode = 3,
 }) {
   return showGeneralDialog(
     context: context,
@@ -43,8 +43,8 @@ class AboutGlassDialog extends StatelessWidget {
 
   const AboutGlassDialog({
     super.key,
-    this.versionName = '1.0.0',
-    this.versionCode = 1,
+    this.versionName = '2.0.0',
+    this.versionCode = 3,
   });
 
   static const String _tiktokUrl =

@@ -1,7 +1,7 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:path_provider/path_provider.dart';
@@ -334,9 +334,27 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
                         ),
                       ),
 
-                      const SliverToBoxAdapter(
-                        child: SizedBox(height: 18),
-                      ),
+                      // Songs List Header (Track count)
+                      if (albumSongs.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                            child: Row(
+                              children: [
+                                Icon(Icons.queue_music_rounded, size: 18, color: AppTheme.accentColor),
+                                const SizedBox(width: 7),
+                                Text(
+                                  '${LanguageService().t('songs_list')} (${albumSongs.length})',
+                                  style: TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
 
                       // Songs List or Empty State
                       if (albumSongs.isEmpty)
@@ -413,179 +431,209 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
                           ),
                         )
                       else
-                        SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final song = albumSongs[index];
-                              final isCurrent = audio.currentSong?.id == song.id;
-                              final isPlaying = isCurrent && audio.player.playing;
+                        SliverReorderableList(
+                          itemCount: albumSongs.length,
+                          onReorder: (oldIndex, newIndex) async {
+                            HapticFeedback.mediumImpact();
+                            await albumService.reorderAlbumSongs(
+                              currentAlbum.id,
+                              oldIndex,
+                              newIndex,
+                            );
+                          },
+                          proxyDecorator: (child, index, animation) {
+                            return AnimatedBuilder(
+                              animation: animation,
+                              builder: (context, child) {
+                                final animValue = Curves.easeInOut.transform(animation.value);
+                                final elevation = lerpDouble(0, 8, animValue)!;
+                                return Material(
+                                  elevation: elevation,
+                                  color: AppTheme.cardColor.withOpacity(0.96),
+                                  borderRadius: BorderRadius.circular(16),
+                                  shadowColor: AppTheme.accentColor.withOpacity(0.4),
+                                  child: child,
+                                );
+                              },
+                              child: child,
+                            );
+                          },
+                          itemBuilder: (context, index) {
+                            final song = albumSongs[index];
+                            final isCurrent = audio.currentSong?.id == song.id;
+                            final isPlaying = isCurrent && audio.player.playing;
 
-                              return InkWell(
-                                onTap: () {
-                                  if (isCurrent) {
-                                    if (!audio.player.playing) {
-                                      audio.player.play();
+                            return ReorderableDelayedDragStartListener(
+                              key: ValueKey('album_song_${song.id}'),
+                              index: index,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    if (isCurrent) {
+                                      if (!audio.player.playing) {
+                                        audio.player.play();
+                                      }
+                                    } else {
+                                      audio.playSong(song, playlist: albumSongs);
                                     }
-                                  } else {
-                                    audio.playSong(song, playlist: albumSongs);
-                                  }
-                                  if (context.mounted) {
-                                    NowPlayingSheet.show(context);
-                                  }
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                                  child: Row(
-                                    children: [
-                                      // Right Thumbnail (RTL layout) - Enlarged for stunning visuals
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(16),
-                                        child: SizedBox(
-                                          width: 68,
-                                          height: 68,
-                                          child: Stack(
-                                            children: [
-                                              QueryArtworkOrFallback(
-                                                id: song.id,
-                                                size: 68,
-                                                borderRadius: 16,
-                                              ),
-                                              if (isCurrent)
-                                                Container(
-                                                  width: 68,
-                                                  height: 68,
-                                                  color: Colors.black.withOpacity(0.55),
-                                                  child: Center(
-                                                    child: Icon(
-                                                      isPlaying ? Icons.equalizer_rounded : Icons.pause_rounded,
-                                                      color: AppTheme.accentColor,
-                                                      size: 30,
+                                    if (context.mounted) {
+                                      NowPlayingSheet.show(context);
+                                    }
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                                    child: Row(
+                                      children: [
+                                        // Right Thumbnail (RTL layout) - Enlarged for stunning visuals
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(16),
+                                          child: SizedBox(
+                                            width: 68,
+                                            height: 68,
+                                            child: Stack(
+                                              children: [
+                                                QueryArtworkOrFallback(
+                                                  id: song.id,
+                                                  size: 68,
+                                                  borderRadius: 16,
+                                                ),
+                                                if (isCurrent)
+                                                  Container(
+                                                    width: 68,
+                                                    height: 68,
+                                                    color: Colors.black.withOpacity(0.55),
+                                                    child: Center(
+                                                      child: Icon(
+                                                        isPlaying ? Icons.equalizer_rounded : Icons.pause_rounded,
+                                                        color: AppTheme.accentColor,
+                                                        size: 30,
+                                                      ),
                                                     ),
                                                   ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 14),
+
+                                        // Song Title & Artist info
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                song.title,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: isCurrent ? AppTheme.accentColor : AppTheme.textPrimary,
+                                                  fontSize: 15.5,
+                                                  fontWeight: FontWeight.bold,
                                                 ),
+                                              ),
+                                              const SizedBox(height: 5),
+                                              Row(
+                                                children: [
+                                                  Flexible(
+                                                    child: Text(
+                                                      '${song.artist ?? LanguageService().t('unknown_artist')} - ${song.album ?? currentAlbum.name}',
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        color: AppTheme.textSecondary,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  // Pill badge matching image design
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                                    decoration: BoxDecoration(
+                                                      color: AppTheme.isDark ? const Color(0xFF19251E) : AppTheme.surfaceLight,
+                                                      borderRadius: BorderRadius.circular(6),
+                                                      border: Border.all(color: AppTheme.cardBorder, width: 0.8),
+                                                    ),
+                                                    child: Text(
+                                                      audio.formatDuration(song.duration),
+                                                      style: TextStyle(
+                                                        color: AppTheme.textSecondary,
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ],
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 14),
 
-                                      // Song Title & Artist info
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              song.title,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: isCurrent ? AppTheme.accentColor : AppTheme.textPrimary,
-                                                fontSize: 15.5,
-                                                fontWeight: FontWeight.bold,
+                                        // Trailing options button
+                                        PopupMenuButton<String>(
+                                          icon: Icon(
+                                            Icons.more_vert_rounded,
+                                            color: AppTheme.textMuted,
+                                            size: 20,
+                                          ),
+                                          color: AppTheme.cardColor,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(14),
+                                            side: BorderSide(color: AppTheme.cardBorder, width: 1),
+                                          ),
+                                          onSelected: (val) async {
+                                            if (val == 'remove') {
+                                              await albumService.removeSongFromAlbum(currentAlbum.id, song.id);
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      LanguageService.tr('song_removed_from_album_msg').replaceAll('{title}', song.title),
+                                                      style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                                                    ),
+                                                    backgroundColor: AppTheme.cardColor,
+                                                    duration: const Duration(seconds: 2),
+                                                  ),
+                                                );
+                                              }
+                                            } else if (val == 'play_now') {
+                                              audio.playSong(song, playlist: albumSongs);
+                                              if (context.mounted) {
+                                                NowPlayingSheet.show(context);
+                                              }
+                                            }
+                                          },
+                                          itemBuilder: (context) => [
+                                            PopupMenuItem(
+                                              value: 'play_now',
+                                              child: Row(
+                                                children: [
+                                                  Icon(Icons.play_arrow_rounded, color: AppTheme.accentColor, size: 18),
+                                                  const SizedBox(width: 8),
+                                                  Text(LanguageService.tr('play_now'), style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+                                                ],
                                               ),
                                             ),
-                                            const SizedBox(height: 5),
-                                            Row(
-                                              children: [
-                                                Flexible(
-                                                  child: Text(
-                                                    '${song.artist ?? 'غير معروف'} - ${song.album ?? currentAlbum.name}',
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                    style: TextStyle(
-                                                      color: AppTheme.textSecondary,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                // Pill badge matching image design
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                                  decoration: BoxDecoration(
-                                                    color: AppTheme.isDark ? const Color(0xFF19251E) : AppTheme.surfaceLight,
-                                                    borderRadius: BorderRadius.circular(6),
-                                                    border: Border.all(color: AppTheme.cardBorder, width: 0.8),
-                                                  ),
-                                                  child: Text(
-                                                    audio.formatDuration(song.duration),
-                                                    style: TextStyle(
-                                                      color: AppTheme.textSecondary,
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
+                                            PopupMenuItem(
+                                              value: 'remove',
+                                              child: Row(
+                                                children: [
+                                                  const Icon(Icons.remove_circle_outline_rounded, color: Color(0xFFFF5252), size: 18),
+                                                  const SizedBox(width: 8),
+                                                  Text(LanguageService.tr('remove_from_this_album'), style: const TextStyle(color: Color(0xFFFF5252), fontSize: 13)),
+                                                ],
+                                              ),
                                             ),
                                           ],
                                         ),
-                                      ),
-
-                                      // Trailing options button
-                                      PopupMenuButton<String>(
-                                        icon: Icon(
-                                          Icons.more_vert_rounded,
-                                          color: AppTheme.textMuted,
-                                          size: 20,
-                                        ),
-                                        color: AppTheme.cardColor,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(14),
-                                          side: BorderSide(color: AppTheme.cardBorder, width: 1),
-                                        ),
-                                        onSelected: (val) async {
-                                          if (val == 'remove') {
-                                            await albumService.removeSongFromAlbum(currentAlbum.id, song.id);
-                                            if (context.mounted) {
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(
-                                                  content: Text(
-                                                    LanguageService.tr('song_removed_from_album_msg').replaceAll('{title}', song.title),
-                                                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-                                                  ),
-                                                  backgroundColor: AppTheme.cardColor,
-                                                  duration: const Duration(seconds: 2),
-                                                ),
-                                              );
-                                            }
-                                          } else if (val == 'play_now') {
-                                            audio.playSong(song, playlist: albumSongs);
-                                            if (context.mounted) {
-                                              NowPlayingSheet.show(context);
-                                            }
-                                          }
-                                        },
-                                        itemBuilder: (context) => [
-                                          PopupMenuItem(
-                                            value: 'play_now',
-                                            child: Row(
-                                              children: [
-                                                Icon(Icons.play_arrow_rounded, color: AppTheme.accentColor, size: 18),
-                                                const SizedBox(width: 8),
-                                                Text(LanguageService.tr('play_now'), style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
-                                              ],
-                                            ),
-                                          ),
-                                          PopupMenuItem(
-                                            value: 'remove',
-                                            child: Row(
-                                              children: [
-                                                const Icon(Icons.remove_circle_outline_rounded, color: Color(0xFFFF5252), size: 18),
-                                                const SizedBox(width: 8),
-                                                Text(LanguageService.tr('remove_from_this_album'), style: const TextStyle(color: Color(0xFFFF5252), fontSize: 13)),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              );
-                            },
-                            childCount: albumSongs.length,
-                          ),
+                              ),
+                            );
+                          },
                         ),
 
                       // Bottom spacing so songs aren't covered by the mini player
@@ -845,7 +893,17 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
                             subtitle: LanguageService.tr('reorder_songs_subtitle'),
                             onTap: () {
                               Navigator.pop(dialogContext);
-                              _showReorderSongsDialog(context, album, audio, albumService);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    LanguageService().t('reorder_songs_hint'),
+                                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                                  ),
+                                  backgroundColor: AppTheme.cardColor,
+                                  behavior: SnackBarBehavior.floating,
+                                  duration: const Duration(seconds: 3),
+                                ),
+                              );
                             },
                           ),
 
@@ -1389,251 +1447,6 @@ class _AlbumDetailsScreenState extends State<AlbumDetailsScreen> {
       album,
       audioService: audio,
       albumService: albumService,
-    );
-  }
-
-  // -------------------------------------------------------------
-  // 4. Change Song Order (Reorderable List Dialog)
-  // -------------------------------------------------------------
-  void _showReorderSongsDialog(
-    BuildContext context,
-    CustomAlbum album,
-    AudioService audio,
-    AlbumService albumService,
-  ) {
-    final songs = albumService.getSongsForAlbum(album.id, audio.allSongs);
-    if (songs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(LanguageService.tr('no_songs_in_album_to_reorder'), style: TextStyle(color: AppTheme.textPrimary)),
-          backgroundColor: AppTheme.cardColor,
-        ),
-      );
-      return;
-    }
-
-    final reorderedSongs = List<SongModel>.from(songs);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => StatefulBuilder(
-        builder: (context, setOrderState) {
-          return Directionality(
-            textDirection: LanguageService().textDirection,
-            child: GlassBottomSheet(
-              height: MediaQuery.of(context).size.height * 0.82,
-              child: Column(
-                children: [
-                  Center(
-                    child: Container(
-                      margin: const EdgeInsets.only(top: 10, bottom: 6),
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppTheme.cardBorder,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 6, 18, 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              LanguageService.tr('reorder_songs'),
-                              style: TextStyle(
-                                color: AppTheme.textPrimary,
-                                fontSize: 16.5,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              LanguageService.tr('reorder_instructions'),
-                              style: TextStyle(
-                                color: AppTheme.accentColor,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.close_rounded, color: AppTheme.textSecondary),
-                          onPressed: () => Navigator.pop(sheetCtx),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Divider(color: AppTheme.dividerColor, height: 1),
-                  Expanded(
-                    child: Theme(
-                      data: Theme.of(context).copyWith(
-                        canvasColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                      ),
-                      child: ReorderableListView.builder(
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: reorderedSongs.length,
-                        onReorder: (oldIndex, newIndex) {
-                          setOrderState(() {
-                            if (newIndex > oldIndex) newIndex -= 1;
-                            final item = reorderedSongs.removeAt(oldIndex);
-                            reorderedSongs.insert(newIndex, item);
-                          });
-                        },
-                        itemBuilder: (context, index) {
-                          final song = reorderedSongs[index];
-                          return Material(
-                            key: ValueKey(song.id),
-                            color: Colors.transparent,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: AppTheme.cardColor,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: AppTheme.cardBorder, width: 0.8),
-                              ),
-                              child: Row(
-                                children: [
-                                  // Drag handle indicator
-                                  ReorderableDragStartListener(
-                                    index: index,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(6),
-                                      child: Icon(
-                                        Icons.drag_indicator_rounded,
-                                        color: AppTheme.accentColor,
-                                        size: 22,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  // Order number badge
-                                  Container(
-                                    width: 26,
-                                    height: 26,
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.surfaceLight,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        '${index + 1}',
-                                        style: TextStyle(
-                                          color: AppTheme.textSecondary,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  // Thumbnail (Enlarged)
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(14),
-                                    child: SizedBox(
-                                      width: 56,
-                                      height: 56,
-                                      child: QueryArtworkOrFallback(
-                                        id: song.id,
-                                        size: 56,
-                                        borderRadius: 14,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  // Title & artist
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          song.title,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: AppTheme.textPrimary,
-                                            fontSize: 13.5,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          song.artist ?? LanguageService.tr('unknown_artist'),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: AppTheme.textSecondary,
-                                            fontSize: 11.5,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  // Save Order Button
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surface,
-                      border: Border(top: BorderSide(color: AppTheme.dividerColor, width: 1)),
-                    ),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.accentColor,
-                          foregroundColor: AppTheme.accentColor.computeLuminance() > 0.4 ? Colors.black : Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          elevation: 0,
-                        ),
-                        icon: const Icon(Icons.check_rounded, size: 20),
-                        label: Text(
-                          LanguageService.tr('save_order'),
-                          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () async {
-                          final newIds = reorderedSongs.map((s) => s.id).toList();
-                          await albumService.setAlbumSongs(album.id, newIds);
-                          if (sheetCtx.mounted) Navigator.pop(sheetCtx);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  LanguageService.tr('order_saved'),
-                                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-                                ),
-                                backgroundColor: AppTheme.cardColor,
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
 

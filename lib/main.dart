@@ -4,9 +4,13 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'screens/main_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/album_service.dart';
 import 'services/app_preferences.dart';
 import 'services/audio_effects_service.dart';
+import 'services/equalizer_service.dart';
+import 'services/listening_insights_service.dart';
+import 'services/default_songs_service.dart';
 import 'services/audio_service.dart';
 import 'services/language_service.dart';
 import 'services/settings_repository.dart';
@@ -29,6 +33,9 @@ void main() async {
   AppTheme.init();
   LanguageService().init();
   AudioEffectsService().init();
+  await EqualizerService().init();
+  await ListeningInsightsService().init();
+  await DefaultSongsService().init();
 
   await JustAudioBackground.init(
     androidNotificationChannelId: 'com.mbd.music.channel.audio',
@@ -59,8 +66,10 @@ void main() async {
   final bool isFirstLaunchDone = await AppPreferences.isOnboardingCompleted();
 
   runApp(MDMusicApp(
-    initialScreen:
-        isFirstLaunchDone ? const MainScreen() : const OnboardingScreen(),
+    initialScreen: SplashScreen(
+      nextScreen:
+          isFirstLaunchDone ? const MainScreen() : const OnboardingScreen(),
+    ),
   ));
 
   // Proactively check permission and load local library
@@ -84,6 +93,7 @@ class MDMusicApp extends StatelessWidget {
         AppTheme.customBgImageNotifier,
         AppTheme.customBgBlurNotifier,
         AppTheme.customBgOpacityNotifier,
+        AppTheme.fontScaleNotifier,
         LanguageService().currentLanguage,
       ]),
       builder: (context, _) {
@@ -94,6 +104,7 @@ class MDMusicApp extends StatelessWidget {
                 : ThemeMode.system);
         final currentLocale = LanguageService().currentLocale;
         final textDir = LanguageService().textDirection;
+        final fontScale = AppTheme.fontScaleNotifier.value;
 
         return MaterialApp(
           title: 'MD Music',
@@ -114,14 +125,20 @@ class MDMusicApp extends StatelessWidget {
           ],
           home: initialScreen,
           builder: (context, child) {
-            return Directionality(
-              textDirection: textDir,
-              child: Stack(
-                children: [
-                  const Positioned.fill(child: GlobalAppBackground()),
-                  ?child,
-                  const VolumeHud(),
-                ],
+            final mediaQuery = MediaQuery.of(context);
+            return MediaQuery(
+              data: mediaQuery.copyWith(
+                textScaler: TextScaler.linear(fontScale),
+              ),
+              child: Directionality(
+                textDirection: textDir,
+                child: Stack(
+                  children: [
+                    const Positioned.fill(child: GlobalAppBackground()),
+                    if (child != null) child,
+                    const VolumeHud(),
+                  ],
+                ),
               ),
             );
           },

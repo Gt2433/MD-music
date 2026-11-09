@@ -4,6 +4,7 @@ import '../services/audio_effects_service.dart';
 import '../services/language_service.dart';
 import '../theme/app_theme.dart';
 import 'glass_dialog.dart';
+import 'equalizer_sheet.dart';
 
 void showAudioEffectsSheet(BuildContext context) {
   showGlassBottomSheet(
@@ -19,7 +20,6 @@ class AudioEffectsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final effectsService = AudioEffectsService();
     final accent = AppTheme.accentColor;
-    final isArabic = LanguageService().isArabic;
 
     return Directionality(
       textDirection: LanguageService().textDirection,
@@ -31,10 +31,12 @@ class AudioEffectsSheet extends StatelessWidget {
             builder: (context, _) {
               final activeId = effectsService.activeEffect;
 
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+              return SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                   // 1. Top Drag Handle
                   Center(
                     child: Container(
@@ -79,7 +81,7 @@ class AudioEffectsSheet extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isArabic ? 'المؤثرات الصوتية' : 'Audio Effects',
+                              LanguageService().t('audio_effects'),
                               style: TextStyle(
                                 color: AppTheme.textPrimary,
                                 fontSize: 16.5,
@@ -89,9 +91,7 @@ class AudioEffectsSheet extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              isArabic
-                                  ? 'مؤثرات صوتية فورية لتجربة استماع سينمائية'
-                                  : 'Real-time effects for a cinematic sound',
+                              LanguageService().t('audio_effects_desc'),
                               style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 12,
@@ -208,7 +208,7 @@ class AudioEffectsSheet extends StatelessWidget {
                                                     BorderRadius.circular(6),
                                               ),
                                               child: Text(
-                                                isArabic ? 'رائج' : 'NEW',
+                                                LanguageService().t('audio_effects_badge_hot'),
                                                 style: TextStyle(
                                                   color: accent,
                                                   fontSize: 10,
@@ -276,6 +276,71 @@ class AudioEffectsSheet extends StatelessWidget {
 
                   const SizedBox(height: 6),
 
+                  // Equalizer Quick Button
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        Navigator.pop(context);
+                        EqualizerSheet.show(context);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: accent.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: accent.withOpacity(0.4), width: 1.2),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: accent.withOpacity(0.22),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.equalizer_rounded, color: accent, size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    LanguageService().t('equalizer_bass_title'),
+                                    style: TextStyle(
+                                      color: AppTheme.textPrimary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    LanguageService().t('equalizer_bass_desc'),
+                                    style: TextStyle(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              LanguageService().isRtl
+                                  ? Icons.chevron_left_rounded
+                                  : Icons.chevron_right_rounded,
+                              color: accent,
+                              size: 20,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
                   // 4. "More Effects Coming Soon" placeholder card
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -309,9 +374,7 @@ class AudioEffectsSheet extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isArabic
-                                    ? 'المزيد من المؤثرات قريباً...'
-                                    : 'More effects coming soon...',
+                                LanguageService().t('audio_effects_coming_soon'),
                                 style: TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontSize: 12.5,
@@ -320,9 +383,7 @@ class AudioEffectsSheet extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                isArabic
-                                    ? 'Slowed + Reverb, 8D Spatial, Bass Boost...'
-                                    : 'Slowed + Reverb, 8D Spatial, Bass Boost...',
+                                'Slowed + Reverb, Bass Boost, Nightcore...',
                                 style: TextStyle(
                                   color: AppTheme.textSecondary.withOpacity(0.8),
                                   fontSize: 11,
@@ -335,7 +396,8 @@ class AudioEffectsSheet extends StatelessWidget {
                     ),
                   ),
                 ],
-              );
+              ),
+            );
             },
           ),
         ),

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import '../services/audio_service.dart';
 import '../services/language_service.dart';
+import '../services/song_edit_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/song_tile.dart';
+import '../widgets/staggered_song_item.dart';
+import 'music_recognition_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -24,19 +27,26 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _onSearchChanged(String query) {
     final all = AudioService().allSongs;
+    final editService = SongEditService();
     if (query.trim().isEmpty) {
       setState(() {
         _filteredSongs = all;
       });
       return;
     }
-    final q = query.toLowerCase();
+    final q = query.toLowerCase().trim();
     setState(() {
       _filteredSongs = all.where((s) {
         final title = s.title.toLowerCase();
+        final displayTitle = editService.getDisplayTitle(s).toLowerCase();
         final artist = (s.artist ?? '').toLowerCase();
+        final displayArtist = editService.getDisplayArtist(s).toLowerCase();
         final album = (s.album ?? '').toLowerCase();
-        return title.contains(q) || artist.contains(q) || album.contains(q);
+        return title.contains(q) ||
+            displayTitle.contains(q) ||
+            artist.contains(q) ||
+            displayArtist.contains(q) ||
+            album.contains(q);
       }).toList();
     });
   }
@@ -60,8 +70,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   width: 40,
                   height: 40,
                   margin: EdgeInsets.only(
-                    left: langService.isArabic ? 8 : 0,
-                    right: langService.isArabic ? 0 : 8,
+                    left: langService.isRtl ? 8 : 0,
+                    right: langService.isRtl ? 0 : 8,
                   ),
                   decoration: BoxDecoration(
                     color: AppTheme.cardColor,
@@ -71,7 +81,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     icon: Icon(
-                      langService.isArabic
+                      langService.isRtl
                           ? Icons.arrow_forward_rounded
                           : Icons.arrow_back_rounded,
                       color: AppTheme.textPrimary,
@@ -114,7 +124,24 @@ class _SearchScreenState extends State<SearchScreen> {
                               _searchController.clear();
                               _onSearchChanged('');
                             },
-                            child: Icon(Icons.close_rounded, color: AppTheme.textSecondary, size: 18),
+                            child: Icon(Icons.close_rounded,
+                                color: AppTheme.textSecondary, size: 18),
+                          )
+                        else
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        const MusicRecognitionScreen()),
+                              );
+                            },
+                            child: Tooltip(
+                              message: LanguageService().t('music_recognition_title'),
+                              child: Icon(Icons.graphic_eq_rounded,
+                                  color: AppTheme.accentColor, size: 20),
+                            ),
                           ),
                       ],
                     ),
@@ -163,7 +190,16 @@ class _SearchScreenState extends State<SearchScreen> {
                       physics: const BouncingScrollPhysics(),
                       itemCount: _filteredSongs.length,
                       itemBuilder: (context, index) {
-                        return SongTile(song: _filteredSongs[index], playlist: _filteredSongs);
+                        final song = _filteredSongs[index];
+                        return StaggeredSongItem(
+                          key: ValueKey('stagger_${song.id}'),
+                          index: index,
+                          child: SongTile(
+                            key: ValueKey('search_song_${song.id}'),
+                            song: song,
+                            playlist: _filteredSongs,
+                          ),
+                        );
                       },
                     ),
             ),

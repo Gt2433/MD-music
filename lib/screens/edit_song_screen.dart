@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import '../services/language_service.dart';
 import '../services/song_edit_service.dart';
@@ -22,6 +24,8 @@ class _EditSongScreenState extends State<EditSongScreen> {
   late TextEditingController _titleController;
   late TextEditingController _artistController;
 
+  String? _selectedArtworkPath;
+  bool _isArtworkCleared = false;
   bool _isSaving = false;
   bool _isReverting = false;
 
@@ -44,6 +48,11 @@ class _EditSongScreenState extends State<EditSongScreen> {
 
     _titleController = TextEditingController(text: initialTitle);
     _artistController = TextEditingController(text: initialArtist);
+
+    final existingCustomArt = _editService.getCustomArtworkPath(widget.song.id);
+    _selectedArtworkPath = (existingCustomArt != null && File(existingCustomArt).existsSync())
+        ? existingCustomArt
+        : null;
   }
 
   @override
@@ -66,14 +75,56 @@ class _EditSongScreenState extends State<EditSongScreen> {
     }
   }
 
+  Future<void> _pickArtworkFromGallery() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 95,
+      );
+      if (picked == null) return;
+
+      final appDir = await getApplicationDocumentsDirectory();
+      final ext = picked.path.contains('.') ? picked.path.split('.').last : 'jpg';
+      final newArtworkFile = File('${appDir.path}/song_art_${widget.song.id}_${DateTime.now().millisecondsSinceEpoch}.$ext');
+
+      await File(picked.path).copy(newArtworkFile.path);
+
+      if (mounted) {
+        setState(() {
+          _selectedArtworkPath = newArtworkFile.path;
+          _isArtworkCleared = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking song artwork: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(LanguageService().t('pick_image_error')),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  void _removeCustomArtwork() {
+    setState(() {
+      _selectedArtworkPath = null;
+      _isArtworkCleared = true;
+    });
+  }
+
   Future<void> _saveChanges() async {
     final title = _titleController.text.trim();
     final artist = _artistController.text.trim();
 
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('يرجى إدخال اسم الأغنية'),
+        SnackBar(
+          content: Text(LanguageService().t('enter_song_title')),
           backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
         ),
@@ -87,6 +138,8 @@ class _EditSongScreenState extends State<EditSongScreen> {
       song: widget.song,
       newTitle: title,
       newArtist: artist,
+      newArtworkPath: _selectedArtworkPath,
+      clearCustomArtwork: _isArtworkCleared,
     );
 
     if (mounted) {
@@ -94,7 +147,7 @@ class _EditSongScreenState extends State<EditSongScreen> {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('تم حفظ التعديلات بنجاح ✨'),
+            content: Text(LanguageService().t('save_edits_success')),
             backgroundColor: AppTheme.accentColor,
             behavior: SnackBarBehavior.floating,
           ),
@@ -102,8 +155,8 @@ class _EditSongScreenState extends State<EditSongScreen> {
         Navigator.pop(context, true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('حدث خطأ أثناء حفظ التعديلات'),
+          SnackBar(
+            content: Text(LanguageService().t('save_edits_error')),
             backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
           ),
@@ -116,26 +169,26 @@ class _EditSongScreenState extends State<EditSongScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: Directionality.of(context),
         child: GlassDialog(
           title: Row(
             children: [
               Icon(Icons.restore_rounded, color: AppTheme.accentColor),
               const SizedBox(width: 10),
               Text(
-                'استعادة البيانات الأصلية',
+                LanguageService().t('revert_dialog_title'),
                 style: TextStyle(color: AppTheme.textPrimary, fontSize: 17),
               ),
             ],
           ),
           content: Text(
-            'هل أنت متأكد من إلغاء التعديلات واستعادة الاسم واسم الفنان الأصليين؟',
+            LanguageService().t('revert_dialog_desc'),
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 13.5),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text('إلغاء', style: TextStyle(color: AppTheme.textMuted)),
+              child: Text(LanguageService().t('cancel'), style: TextStyle(color: AppTheme.textMuted)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -144,7 +197,7 @@ class _EditSongScreenState extends State<EditSongScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('نعم، استعادة الأصلية', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(LanguageService().t('revert_confirm_btn'), style: const TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -158,11 +211,17 @@ class _EditSongScreenState extends State<EditSongScreen> {
     final ok = await _editService.revertToOriginal(widget.song);
 
     if (mounted) {
-      setState(() => _isReverting = false);
+      setState(() {
+        _isReverting = false;
+        if (ok) {
+          _selectedArtworkPath = null;
+          _isArtworkCleared = false;
+        }
+      });
       if (ok) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('تمت استعادة البيانات الأصلية بنجاح 🔄'),
+            content: Text(LanguageService().t('revert_success')),
             backgroundColor: AppTheme.accentColor,
             behavior: SnackBarBehavior.floating,
           ),
@@ -170,8 +229,8 @@ class _EditSongScreenState extends State<EditSongScreen> {
         Navigator.pop(context, true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تعذر استعادة البيانات الأصلية'),
+          SnackBar(
+            content: Text(LanguageService().t('revert_error')),
             backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
           ),
@@ -182,17 +241,32 @@ class _EditSongScreenState extends State<EditSongScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isEdited = _editService.isSongEditedOrTrimmed(widget.song.id);
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        AppTheme.themeModeNotifier,
+        AppTheme.accentColorNotifier,
+        AppTheme.amoledBlackNotifier,
+        LanguageService().currentLanguage,
+      ]),
+      builder: (context, _) {
+        final isEdited = _editService.isSongEditedOrTrimmed(widget.song.id) ||
+            _selectedArtworkPath != null ||
+            _isArtworkCleared;
 
-    return Directionality(
-      textDirection: Directionality.of(context),
-      child: Scaffold(
-        backgroundColor: AppTheme.background,
+        return Directionality(
+          textDirection: Directionality.of(context),
+          child: Scaffold(
+            backgroundColor: AppTheme.background,
         appBar: AppBar(
           backgroundColor: AppTheme.background,
           elevation: 0,
           leading: IconButton(
-            icon: Icon(Icons.arrow_forward_rounded, color: AppTheme.textPrimary),
+            icon: Icon(
+              LanguageService().isArabic
+                  ? Icons.arrow_forward_rounded
+                  : Icons.arrow_back_rounded,
+              color: AppTheme.textPrimary,
+            ),
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(
@@ -235,27 +309,103 @@ class _EditSongScreenState extends State<EditSongScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. Cover Artwork Preview
+              // 1. Cover Artwork Preview & Edit
               Center(
-                child: Container(
-                  width: 130,
-                  height: 130,
-                  decoration: BoxDecoration(
-                    color: AppTheme.cardColor,
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: AppTheme.cardBorder, width: 1.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.25),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: _pickArtworkFromGallery,
+                      behavior: HitTestBehavior.opaque,
+                      child: SizedBox(
+                        width: 146,
+                        height: 146,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            // Main Artwork Card
+                            Align(
+                              alignment: Alignment.center,
+                              child: Container(
+                                width: 140,
+                                height: 140,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.cardColor,
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(
+                                    color: _selectedArtworkPath != null
+                                        ? AppTheme.accentColor.withValues(alpha: 0.8)
+                                        : AppTheme.cardBorder,
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: (_selectedArtworkPath != null ? AppTheme.accentColor : Colors.black).withOpacity(0.25),
+                                      blurRadius: 18,
+                                      offset: const Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(22),
+                                  child: _buildArtworkWidget(),
+                                ),
+                              ),
+                            ),
+                            // Modern Floating Pencil Icon in Bottom-Right Corner
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: GestureDetector(
+                                onTap: _pickArtworkFromGallery,
+                                child: Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.accentColor,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AppTheme.background,
+                                      width: 2.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.35),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    Icons.edit_rounded,
+                                    size: 19,
+                                    color: AppTheme.accentColor.computeLuminance() > 0.4 ? Colors.black : Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_selectedArtworkPath != null || (!_isArtworkCleared && _editService.getCustomArtworkPath(widget.song.id) != null)) ...[
+                      const SizedBox(height: 12),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFFFF5252),
+                          backgroundColor: const Color(0xFFFF5252).withValues(alpha: 0.12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        ),
+                        icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                        label: Text(
+                          LanguageService().t('remove_custom_cover'),
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: _removeCustomArtwork,
                       ),
                     ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: _buildArtworkWidget(),
-                  ),
+                  ],
                 ),
               ),
 
@@ -307,7 +457,7 @@ class _EditSongScreenState extends State<EditSongScreen> {
                         )
                       : const Icon(Icons.save_rounded, size: 22),
                   label: Text(
-                    _isSaving ? 'جارِ الحفظ...' : 'حفظ التعديلات',
+                    _isSaving ? LanguageService().t('saving') : LanguageService().t('save_edits'),
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                   onPressed: _isSaving ? null : _saveChanges,
@@ -322,8 +472,13 @@ class _EditSongScreenState extends State<EditSongScreen> {
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFFFF5252),
-                      side: const BorderSide(color: Color(0xFF452226), width: 1.2),
-                      backgroundColor: const Color(0xFF261214).withOpacity(0.4),
+                      side: BorderSide(
+                        color: AppTheme.isDark ? const Color(0xFF452226) : const Color(0xFFFFCDD2),
+                        width: 1.2,
+                      ),
+                      backgroundColor: AppTheme.isDark
+                          ? const Color(0xFF261214).withOpacity(0.4)
+                          : const Color(0xFFFFEBEE).withOpacity(0.6),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                     icon: _isReverting
@@ -333,9 +488,9 @@ class _EditSongScreenState extends State<EditSongScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF5252)),
                           )
                         : const Icon(Icons.restore_rounded, size: 20),
-                    label: const Text(
-                      'إرجاع للبيانات الأصلية',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    label: Text(
+                      LanguageService().t('revert_to_original'),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     onPressed: _isReverting ? null : _revertToOriginal,
                   ),
@@ -348,22 +503,46 @@ class _EditSongScreenState extends State<EditSongScreen> {
         ),
       ),
     );
+      },
+    );
   }
 
   Widget _buildArtworkWidget() {
-    final customPath = _editService.getCustomArtworkPath(widget.song.id);
-    if (customPath != null && File(customPath).existsSync()) {
+    if (_selectedArtworkPath != null && File(_selectedArtworkPath!).existsSync()) {
       return Image.file(
-        File(customPath),
-        width: 130,
-        height: 130,
+        File(_selectedArtworkPath!),
+        width: 140,
+        height: 140,
         fit: BoxFit.cover,
       );
     }
+
+    if (_isArtworkCleared) {
+      return QueryArtworkWidget(
+        id: widget.song.id,
+        type: ArtworkType.AUDIO,
+        artworkWidth: 140,
+        artworkHeight: 140,
+        artworkFit: BoxFit.cover,
+        artworkBorder: BorderRadius.zero,
+        artworkQuality: FilterQuality.high,
+        keepOldArtwork: false,
+        quality: 100,
+        format: ArtworkFormat.JPEG,
+        size: 1000,
+        nullArtworkWidget: Container(
+          width: 140,
+          height: 140,
+          color: AppTheme.isDark ? const Color(0xFF222834) : const Color(0xFFE2E8F0),
+          child: Icon(Icons.music_note_rounded, size: 50, color: AppTheme.textSecondary.withOpacity(0.4)),
+        ),
+      );
+    }
+
     return QueryArtworkOrFallback(
       id: widget.song.id,
-      size: 130,
-      borderRadius: 20,
+      size: 140,
+      borderRadius: 0,
     );
   }
 
@@ -393,32 +572,61 @@ class _EditSongScreenState extends State<EditSongScreen> {
     Widget? suffix,
     bool readOnly = false,
   }) {
+    final scaffoldBg = AppTheme.background;
+    final isScaffoldLight = scaffoldBg.computeLuminance() > 0.35;
+    final isThemeLight = Theme.of(context).brightness == Brightness.light;
+    final isLight = isScaffoldLight || isThemeLight || !AppTheme.isDark;
+
+    final fieldBg = isLight ? Colors.white : const Color(0xFF141A23);
+    final fieldBorder = isLight ? const Color(0xFFCBD5E1) : const Color(0xFF263242);
+    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
+    final labelColor = isLight ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+    final hintColor = isLight ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+          style: TextStyle(
+            color: labelColor,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 7),
         Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF131922),
+            color: fieldBg,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF202A36), width: 1),
+            border: Border.all(color: fieldBorder, width: 1.2),
+            boxShadow: isLight
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: TextField(
             controller: controller,
             readOnly: readOnly,
             onTap: onTap,
-            style: TextStyle(color: AppTheme.textPrimary, fontSize: 14.5),
+            style: TextStyle(
+              color: textColor,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+            cursorColor: AppTheme.accentColor,
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(color: AppTheme.textMuted, fontSize: 13),
-              prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 20),
+              hintStyle: TextStyle(color: hintColor, fontSize: 13.5),
+              prefixIcon: Icon(icon, color: AppTheme.accentColor, size: 20),
               suffixIcon: suffix,
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
             ),
           ),
         ),

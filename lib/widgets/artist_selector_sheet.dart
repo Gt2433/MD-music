@@ -251,7 +251,11 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('تم اختيار الفنان: "$trimmed" ✨'),
+          content: Text(
+            LanguageService()
+                .t('artist_selected_toast')
+                .replaceAll('{name}', trimmed),
+          ),
           backgroundColor: AppTheme.accentColor,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
@@ -264,14 +268,27 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
   @override
   Widget build(BuildContext context) {
     final accent = AppTheme.accentColor;
-    final isRtl = Directionality.of(context) == TextDirection.rtl;
     final exactMatch = _allArtists.any((a) => a.name.toLowerCase() == _searchQuery.toLowerCase());
     final canCreateNew = _searchQuery.isNotEmpty && !exactMatch;
 
-    final isDark = AppTheme.isDark;
+    final isLight = Theme.of(context).brightness == Brightness.light ||
+        AppTheme.background.computeLuminance() > 0.35 ||
+        !AppTheme.isDark;
+    final isDark = !isLight;
     final glassBg = isDark
-        ? const Color(0xFF080D16).withOpacity(0.50)
-        : Colors.white.withOpacity(0.60);
+        ? const Color(0xFF0C131D).withOpacity(0.92)
+        : Colors.white.withOpacity(0.96);
+    final textPrim = isDark ? Colors.white : const Color(0xFF0F172A);
+    final textSec = isDark ? Colors.white.withOpacity(0.60) : const Color(0xFF475569);
+    final textMuted = isDark ? Colors.white.withOpacity(0.40) : const Color(0xFF94A3B8);
+    final searchBg = isDark ? const Color(0xFF161E2B) : const Color(0xFFF1F5F9);
+    final searchBorder = isDark ? const Color(0xFF263242) : const Color(0xFFCBD5E1);
+    final cardBg = isDark ? const Color(0xFF141C28) : const Color(0xFFF8FAFC);
+    final cardBorder = isDark ? accent.withOpacity(0.3) : const Color(0xFFE2E8F0);
+    final dividerCol = isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06);
+    final avatarBg = isDark ? const Color(0xFF222C3D) : const Color(0xFFE2E8F0);
+    final avatarFg = isDark ? Colors.white : const Color(0xFF1E293B);
+    final dragHandleCol = isDark ? Colors.white.withOpacity(0.28) : Colors.black.withOpacity(0.18);
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
@@ -304,7 +321,7 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                 height: 5,
                 margin: const EdgeInsets.only(top: 12, bottom: 8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.28),
+                  color: dragHandleCol,
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
@@ -330,19 +347,17 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isRtl ? 'اختيار أو إضافة اسم الفنان' : 'Select or Add Artist',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          LanguageService().t('select_add_artist_title'),
+                          style: TextStyle(
+                            color: textPrim,
                             fontSize: 17,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         Text(
-                          isRtl
-                              ? 'اختر من القائمة أو اكتب اسماً جديداً مباشرة'
-                              : 'Pick from list or type a new name directly',
+                          LanguageService().t('select_add_artist_sub'),
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.55),
+                            color: textSec,
                             fontSize: 11.5,
                           ),
                         ),
@@ -350,7 +365,7 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                    icon: Icon(Icons.close_rounded, color: textSec),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -362,16 +377,16 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFF161E2B),
+                  color: searchBg,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: _searchQuery.isNotEmpty ? accent : const Color(0xFF263242),
+                    color: _searchQuery.isNotEmpty ? accent : searchBorder,
                     width: 1.2,
                   ),
                 ),
                 child: TextField(
                   controller: _searchController,
-                  style: const TextStyle(color: Colors.white, fontSize: 15),
+                  style: TextStyle(color: textPrim, fontSize: 15),
                   textInputAction: TextInputAction.done,
                   onSubmitted: (val) {
                     if (val.trim().isNotEmpty) {
@@ -379,12 +394,12 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                     }
                   },
                   decoration: InputDecoration(
-                    hintText: isRtl ? 'ابحث أو اكتب اسم فنان جديد...' : 'Search or type new artist name...',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13.5),
+                    hintText: LanguageService().t('search_type_artist_hint'),
+                    hintStyle: TextStyle(color: textMuted, fontSize: 13.5),
                     prefixIcon: Icon(Icons.search_rounded, color: accent, size: 22),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
-                            icon: const Icon(Icons.clear_rounded, color: Colors.white70, size: 20),
+                            icon: Icon(Icons.clear_rounded, color: textSec, size: 20),
                             onPressed: () {
                               _searchController.clear();
                             },
@@ -435,7 +450,7 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isRtl ? 'تعيين كاسم فنان جديد:' : 'Set as new artist:',
+                              LanguageService().t('set_as_new_artist'),
                               style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11),
                             ),
                             const SizedBox(height: 2),
@@ -459,7 +474,7 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                         ),
                         onPressed: () => _createAndSelectNewArtist(_searchQuery),
                         child: Text(
-                          isRtl ? 'تأكيد واختيار' : 'Confirm',
+                          LanguageService().t('confirm_and_select'),
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
                         ),
                       ),
@@ -475,9 +490,9 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF141C28),
+                    color: cardBg,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: accent.withOpacity(0.3), width: 1),
+                    border: Border.all(color: cardBorder, width: 1),
                   ),
                   child: Row(
                     children: [
@@ -485,8 +500,10 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          isRtl ? 'مقترح من العنوان: ${_titleSuggestions.first}' : 'From title: ${_titleSuggestions.first}',
-                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                          LanguageService()
+                              .t('from_title_suggestion')
+                              .replaceAll('{title}', _titleSuggestions.first),
+                          style: TextStyle(color: textPrim, fontSize: 13, fontWeight: FontWeight.bold),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -499,7 +516,7 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         ),
                         onPressed: () => _createAndSelectNewArtist(_titleSuggestions.first),
-                        child: Text(isRtl ? 'اختيار' : 'Use', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        child: Text(LanguageService().t('use_button'), style: const TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
@@ -512,9 +529,9 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
               child: Row(
                 children: [
                   Text(
-                    isRtl ? 'الفنانون المقترحون والمتاحون' : 'Available Artists',
+                    LanguageService().t('available_artists'),
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.55),
+                      color: textSec,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -523,12 +540,12 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.06),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       '${_filteredArtists.length}',
-                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: textPrim, fontSize: 11, fontWeight: FontWeight.bold),
                     ),
                   ),
                   const Spacer(),
@@ -537,7 +554,7 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                       Navigator.pop(context, LanguageService.tr('unknown_artist'));
                     },
                     child: Text(
-                      isRtl ? 'فنان غير معروف' : 'Unknown Artist',
+                      LanguageService().t('unknown_artist'),
                       style: TextStyle(
                         color: accent.withOpacity(0.85),
                         fontSize: 12,
@@ -565,9 +582,7 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                                 Icon(Icons.person_search_rounded, color: Colors.white.withOpacity(0.3), size: 48),
                                 const SizedBox(height: 12),
                                 Text(
-                                  isRtl
-                                      ? 'اكتب اسم الفنان في الحقل أعلاه واضغط على "تأكيد واختيار"'
-                                      : 'Type artist name above and tap "Confirm"',
+                                  LanguageService().t('type_artist_instruction'),
                                   textAlign: TextAlign.center,
                                   style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 13),
                                 ),
@@ -579,7 +594,7 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                           itemCount: _filteredArtists.length,
                           separatorBuilder: (context, index) => Divider(
-                            color: Colors.white.withOpacity(0.06),
+                            color: dividerCol,
                             height: 1,
                           ),
                           itemBuilder: (context, index) {
@@ -612,7 +627,7 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                                         radius: 20,
                                         backgroundColor: isSelected
                                             ? accent
-                                            : const Color(0xFF222C3D),
+                                            : avatarBg,
                                         child: Text(
                                           item.name.isNotEmpty
                                               ? item.name.characters.first.toUpperCase()
@@ -620,7 +635,7 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                                           style: TextStyle(
                                             color: isSelected
                                                 ? (accent.computeLuminance() > 0.4 ? Colors.black : Colors.white)
-                                                : Colors.white,
+                                                : avatarFg,
                                             fontSize: 14.5,
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -634,7 +649,7 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                                             Text(
                                               item.name,
                                               style: TextStyle(
-                                                color: isSelected ? accent : Colors.white,
+                                                color: isSelected ? accent : textPrim,
                                                 fontSize: 15,
                                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                                               ),
@@ -643,9 +658,9 @@ class _ArtistSelectorSheetState extends State<ArtistSelectorSheet> {
                                             Text(
                                               item.songCount > 0
                                                   ? '${item.songCount} ${LanguageService().t('songs')}'
-                                                  : (isRtl ? 'فنان مقترح' : 'Suggested artist'),
+                                                  : LanguageService().t('suggested_artist'),
                                               style: TextStyle(
-                                                color: Colors.white.withOpacity(0.48),
+                                                color: textSec,
                                                 fontSize: 12,
                                               ),
                                             ),

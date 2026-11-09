@@ -11,6 +11,7 @@ import '../services/song_edit_service.dart';
 import '../theme/app_theme.dart';
 import 'glass_dialog.dart';
 import 'audio_effects_sheet.dart';
+import 'lyrics_sheet.dart';
 
 /// MBD Vinyl Cinema: Premium Landscape Music Player
 class LandscapeVinylPlayer extends StatefulWidget {
@@ -464,7 +465,7 @@ class _LandscapeVinylPlayerState extends State<LandscapeVinylPlayer>
                                         const SizedBox(width: 8),
                                         Text(
                                           _dragPositionMs <= 0.0
-                                              ? '00:00 (${LanguageService().isArabic ? "البداية" : "Start"})'
+                                              ? '00:00 (${LanguageService().t("vinyl_start")})'
                                               : _formatDuration(Duration(
                                                   milliseconds:
                                                       _dragPositionMs.toInt())),
@@ -601,9 +602,7 @@ class _LandscapeVinylPlayerState extends State<LandscapeVinylPlayer>
                                               Icons.auto_awesome_rounded,
                                               color: effectiveAccent,
                                               size: 24),
-                                          tooltip: LanguageService().isArabic
-                                              ? 'المؤثرات الصوتية (الصدى)'
-                                              : 'Audio Effects (Echo)',
+                                          tooltip: LanguageService().t('audio_effects'),
                                           onPressed: () =>
                                               showAudioEffectsSheet(context),
                                         ),
@@ -619,6 +618,16 @@ class _LandscapeVinylPlayerState extends State<LandscapeVinylPlayer>
                                               _showLandscapeQueue(
                                                   context, effectiveAccent),
                                         ),
+                                        // 2.1 Lyrics Button (🎤 كلمات الأغنية)
+                                        IconButton(
+                                          icon: Icon(
+                                              Icons.lyrics_rounded,
+                                              color: effectiveAccent,
+                                              size: 25),
+                                          tooltip: LanguageService.tr('lyrics'),
+                                          onPressed: () => LyricsSheet.show(
+                                              context, widget.song),
+                                        ),
                                         // 3. Return to Portrait Button
                                         IconButton(
                                           icon: const Icon(
@@ -626,7 +635,7 @@ class _LandscapeVinylPlayerState extends State<LandscapeVinylPlayer>
                                                   .screen_lock_portrait_rounded,
                                               color: Colors.white,
                                               size: 26),
-                                          tooltip: 'العودة للوضع الرأسي',
+                                          tooltip: LanguageService().t('return_portrait'),
                                           onPressed: _restorePortrait,
                                         ),
                                         // 4. Close / Dismiss
@@ -712,7 +721,9 @@ class _LandscapeVinylPlayerState extends State<LandscapeVinylPlayer>
                                             .toDouble()
                                             .clamp(0.0, totalMs);
 
-                                    return Column(
+                                    return Directionality(
+                                      textDirection: TextDirection.ltr,
+                                      child: Column(
                                       children: [
                                         SliderTheme(
                                           data: SliderThemeData(
@@ -796,6 +807,7 @@ class _LandscapeVinylPlayerState extends State<LandscapeVinylPlayer>
                                           ),
                                         ),
                                       ],
+                                    ),
                                     );
                                   },
                                 ),
@@ -1355,7 +1367,8 @@ class _VinylDiscWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final labelSize = size * 0.44;
+    // Enlarged cover artwork inside disc (55% diameter)
+    final labelSize = size * 0.55;
 
     return Container(
       width: size,
@@ -1370,7 +1383,7 @@ class _VinylDiscWidget extends StatelessWidget {
           // 1. Concentric Vinyl Grooves
           CustomPaint(
             size: Size(size, size),
-            painter: _VinylGroovesPainter(),
+            painter: _VinylGroovesPainter(labelRadius: labelSize / 2),
           ),
 
           // 2. Specular Bowtie Light Reflection
@@ -1486,19 +1499,23 @@ class _VinylDiscWidget extends StatelessWidget {
 
 /// Concentric rings painter simulating authentic vinyl record grooves
 class _VinylGroovesPainter extends CustomPainter {
+  final double labelRadius;
+
+  _VinylGroovesPainter({required this.labelRadius});
+
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final maxRadius = size.width / 2;
-    final minRadius = size.width * 0.22;
+    final minRadius = labelRadius;
 
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..isAntiAlias = true;
 
     // Draw realistic micro grooves
-    final step = (maxRadius - minRadius) / 22;
-    for (double r = minRadius + 4; r < maxRadius - 2; r += step) {
+    final step = (maxRadius - minRadius) / 18;
+    for (double r = minRadius + 3; r < maxRadius - 2; r += step) {
       final opacity = ((math.sin(r * 0.8) + 1.0) / 2.0 * 0.05) + 0.02;
       paint.color = Colors.white.withOpacity(opacity);
       paint.strokeWidth = (r % (step * 3) == 0) ? 0.8 : 0.4;
@@ -1507,7 +1524,8 @@ class _VinylGroovesPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _VinylGroovesPainter oldDelegate) =>
+      oldDelegate.labelRadius != labelRadius;
 }
 
 /// Realistic Tonearm with animated angle

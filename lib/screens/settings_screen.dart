@@ -1,16 +1,18 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import '../services/language_service.dart';
 import '../services/settings_repository.dart';
 import '../widgets/settings_tiles.dart';
 import '../widgets/about_glass_dialog.dart';
-import '../widgets/custom_background_color_sheet.dart';
-import '../widgets/player_theme_selector.dart';
 import '../widgets/glass_dialog.dart';
-import 'custom_background_editor_screen.dart';
+import 'themes_settings_screen.dart';
+import '../widgets/font_size_selector_sheet.dart';
+import '../widgets/equalizer_sheet.dart';
+import '../widgets/sleep_timer_sheet.dart';
+import '../widgets/listening_insights_sheet.dart';
+import '../widgets/song_sort_sheet.dart';
+import '../services/audio_service.dart';
 import '../services/app_update_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -23,8 +25,11 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final SettingsRepository _repo = SettingsRepository();
 
-  String _versionName = '1.0.0';
-  int _versionCode = 1;
+  static const String appVersion = '2.0.0';
+  static const int appBuildNumber = 3;
+
+  String _versionName = appVersion;
+  int _versionCode = appBuildNumber;
 
   static const MethodChannel _nativeChannel =
       MethodChannel('com.mbd.music/artwork');
@@ -40,10 +45,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final info =
           await _nativeChannel.invokeMapMethod<String, dynamic>('getPackageInfo');
       if (info != null && mounted) {
-        setState(() {
-          _versionName = info['versionName']?.toString() ?? '1.0.0';
-          _versionCode = (info['versionCode'] as num?)?.toInt() ?? 1;
-        });
+        final nativeVer = info['versionName']?.toString();
+        if (nativeVer != null && nativeVer.isNotEmpty && nativeVer != '1.0.0') {
+          setState(() {
+            _versionName = nativeVer;
+            _versionCode = (info['versionCode'] as num?)?.toInt() ?? appBuildNumber;
+          });
+        } else {
+          setState(() {
+            _versionName = appVersion;
+            _versionCode = appBuildNumber;
+          });
+        }
       }
     } catch (_) {}
   }
@@ -54,7 +67,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_isCheckingUpdate) return;
     setState(() => _isCheckingUpdate = true);
 
-    final isArabic = LanguageService().isArabic;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -69,9 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(width: 12),
             Text(
-              isArabic
-                  ? 'جاري التحقق من وجود تحديثات...'
-                  : 'Checking for updates...',
+              LanguageService().t('checking_updates_msg'),
               style: TextStyle(color: AppTheme.textPrimary),
             ),
           ],
@@ -95,9 +105,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isArabic
-                ? 'أنت تستخدم أحدث إصدار بالفعل (v$_versionName)'
-                : 'You are using the latest version (v$_versionName)',
+            LanguageService().t('latest_version_msg').replaceAll('{version}', _versionName),
             style: TextStyle(color: AppTheme.textPrimary),
           ),
           backgroundColor: AppTheme.surface,
@@ -140,35 +148,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showThemeModeDialog() {
-    final current = _repo.themeMode;
-    showDialog(
-      context: context,
-      builder: (ctx) => SettingsRadioDialog<String>(
-        title: LanguageService.tr('theme_mode'),
-        selectedValue: current,
-        options: [
-          SettingsRadioOption<String>(
-            title: LanguageService.tr('theme_system'),
-            value: 'system',
-          ),
-          SettingsRadioOption<String>(
-            title: LanguageService.tr('theme_light'),
-            value: 'light',
-          ),
-          SettingsRadioOption<String>(
-            title: LanguageService.tr('theme_dark'),
-            value: 'dark',
-          ),
-        ],
-        onSelected: (val) async {
-          await _repo.setThemeMode(val);
-          await AppTheme.setThemeMode(val);
-          if (mounted) setState(() {});
-        },
-      ),
-    );
-  }
 
   void _confirmResetSettings() {
     showDialog(
@@ -251,162 +230,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  String _getThemeSubtitle() {
-    switch (_repo.themeMode) {
-      case 'light':
-        return LanguageService.tr('theme_light');
-      case 'dark':
-        return LanguageService.tr('theme_dark');
-      default:
-        return LanguageService.tr('theme_system');
-    }
-  }
-
-  String _getPlayerThemeSubtitle() {
-    switch (_repo.playerTheme) {
-      case 'vinyl':
-        return LanguageService.tr('player_theme_vinyl');
-      case 'default':
-      default:
-        return LanguageService.tr('player_theme_default');
-    }
-  }
-
-  void _showCustomBackgroundColorSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => const CustomBackgroundColorSheet(),
-    ).then((_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  Future<void> _handleGalleryBackgroundTap() async {
-    final imagePath = _repo.customBgImagePath;
-    final isImageActive = _repo.bgType == 'image' && imagePath != null;
-
-    if (isImageActive) {
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
-        builder: (ctx) => GlassBottomSheet(
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 44,
-                  height: 4.5,
-                  margin: const EdgeInsets.only(top: 12, bottom: 12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.dividerColor,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-                ListTile(
-                  leading:
-                      Icon(Icons.tune_rounded, color: AppTheme.accentColor),
-                  title: Text(
-                    LanguageService.tr('edit_bg_image'),
-                    style: TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    final rawPath = _repo.customBgRawImagePath ?? imagePath;
-                    final targetFile = File(rawPath);
-                    if (!targetFile.existsSync() && File(imagePath).existsSync()) {
-                      // Fallback to cropped if raw not found
-                      _openEditor(File(imagePath));
-                    } else {
-                      _openEditor(targetFile);
-                    }
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.add_photo_alternate_rounded,
-                      color: AppTheme.accentColor),
-                  title: Text(
-                    LanguageService.tr('custom_bg_image'),
-                    style: TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _pickNewImageAndOpenEditor();
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.delete_outline_rounded,
-                      color: AppTheme.errorColor),
-                  title: Text(
-                    LanguageService.tr('remove_custom_bg'),
-                    style: TextStyle(
-                      color: AppTheme.errorColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await _repo.clearCustomBg();
-                    AppTheme.bgTypeNotifier.value = 'default';
-                    AppTheme.updateSystemUIOverlay();
-                    if (mounted) setState(() {});
-                  },
-                ),
-                const SizedBox(height: 10),
-              ],
-            ),
-          ),
-        ),
-      );
-    } else {
-      await _pickNewImageAndOpenEditor();
-    }
-  }
-
-  Future<void> _openEditor(File file) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CustomBackgroundEditorScreen(
-          imageFile: file,
-          initialBlur: _repo.customBgBlur,
-          initialOpacity: _repo.customBgOpacity,
-        ),
-      ),
-    );
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _pickNewImageAndOpenEditor() async {
-    try {
-      final picker = ImagePicker();
-      final picked = await picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 100,
-      );
-      if (picked != null && mounted) {
-        await _openEditor(File(picked.path));
-      }
-    } catch (e) {
-      debugPrint('Error picking background image: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(LanguageService.tr('pick_image_error')),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -437,7 +260,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // SECTION 1: Appearance (المظهر)
             _buildAppearanceSection(),
 
-            // SECTION 2: About (حول التطبيق)
+            // SECTION 2: Audio & Smart Features (الصوت والمؤثرات)
+            _buildAudioAndFeaturesSection(),
+
+            // SECTION 3: About (حول التطبيق)
             _buildAboutSection(),
 
             // Reset All Settings Button
@@ -478,142 +304,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Section 1: Appearance
   // -------------------------------------------------------------
   Widget _buildAppearanceSection() {
-    final effectiveDark = AppTheme.isDark;
     final accentColor = AppTheme.accentColor;
 
     return SettingsSection(
       title: LanguageService.tr('appearance'),
       children: [
-        // 1.1 Language
+        // 1.1 Language (اللغة)
         SettingsNavigationTile(
           icon: Icons.translate_rounded,
           title: LanguageService.tr('language'),
           subtitle: _getLanguageSubtitle(),
           onTap: _showLanguageDialog,
         ),
-        // 1.2 Theme Mode
-        SettingsNavigationTile(
-          icon: Icons.brightness_medium_rounded,
-          title: LanguageService.tr('theme_mode'),
-          subtitle: _getThemeSubtitle(),
-          onTap: _showThemeModeDialog,
-        ),
-        // 1.3 Accent Color
+        // 1.2 Themes (الثيمات)
         SettingsNavigationTile(
           icon: Icons.palette_rounded,
-          title: LanguageService.tr('accent_color'),
-          subtitle: LanguageService.tr('accent_color_desc'),
-          trailing: Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              color: accentColor,
-              shape: BoxShape.circle,
-              border:
-                  Border.all(color: Colors.white.withOpacity(0.8), width: 2),
-            ),
-          ),
-          onTap: () {
-            showModalBottomSheet(
-              context: context,
-              backgroundColor: Colors.transparent,
-              isScrollControlled: true,
-              builder: (_) => const SettingsColorPickerSheet(),
-            );
-          },
-        ),
-        // 1.4 AMOLED Pure Black
-        SettingsSwitchTile(
-          icon: Icons.dark_mode_rounded,
-          title: LanguageService.tr('amoled_black'),
-          subtitle: effectiveDark
-              ? LanguageService.tr('amoled_black_desc')
-              : LanguageService.tr('amoled_dark_only'),
-          value: _repo.amoledBlack,
-          enabled: effectiveDark,
-          onChanged: (val) async {
-            await _repo.setAmoledBlack(val);
-            AppTheme.amoledBlackNotifier.value = val;
-            setState(() {});
-          },
-        ),
-        // 1.5 Custom Background Color
-        SettingsNavigationTile(
-          icon: Icons.format_paint_rounded,
-          title: LanguageService.tr('custom_bg_color'),
-          subtitle: _repo.bgType == 'color'
-              ? '#${_repo.customBgColor.value.toRadixString(16).substring(2).toUpperCase()}'
-              : LanguageService.tr('custom_bg_color_desc'),
-          trailing: Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              color: _repo.bgType == 'color'
-                  ? _repo.customBgColor
-                  : (_repo.themeMode == 'light'
-                      ? AppTheme.lightBackground
-                      : AppTheme.darkBackground),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: _repo.bgType == 'color'
-                    ? accentColor
-                    : Colors.white.withOpacity(0.6),
-                width: 2,
+          title: LanguageService.tr('themes'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: accentColor.withOpacity(0.45),
+                      blurRadius: 6,
+                    ),
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: AppTheme.textMuted,
+              ),
+            ],
           ),
-          onTap: _showCustomBackgroundColorSheet,
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ThemesSettingsScreen()),
+            );
+            if (mounted) setState(() {});
+          },
         ),
-        // 1.6 Custom Gallery Background Image
+        // 1.3 Font Size (حجم الخط)
         SettingsNavigationTile(
-          icon: Icons.wallpaper_rounded,
-          title: LanguageService.tr('custom_bg_image'),
-          subtitle: _repo.bgType == 'image' && _repo.customBgImagePath != null
-              ? LanguageService.tr('bg_image_active')
-              : LanguageService.tr('custom_bg_image_desc'),
-          trailing: _repo.bgType == 'image' &&
-                  _repo.customBgImagePath != null &&
-                  File(_repo.customBgImagePath!).existsSync()
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.file(
-                    File(_repo.customBgImagePath!),
-                    width: 26,
-                    height: 26,
-                    fit: BoxFit.cover,
+          icon: Icons.format_size_rounded,
+          title: LanguageService.tr('font_size'),
+          subtitle: '${(_repo.fontScale * 100).round()}% • ${LanguageService.tr('font_size_desc')}',
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: accentColor.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${(_repo.fontScale * 100).round()}%',
+                  style: TextStyle(
+                    color: accentColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
                   ),
-                )
-              : null,
-          onTap: _handleGalleryBackgroundTap,
-        ),
-        // 1.7 Restore Default Background (Visible when custom color or image is active)
-        if (_repo.bgType != 'default')
-          SettingsNavigationTile(
-            icon: Icons.restore_rounded,
-            title: LanguageService.tr('remove_custom_bg'),
-            subtitle: LanguageService.tr('remove_custom_bg_confirm'),
-            onTap: () async {
-              await _repo.clearCustomBg();
-              AppTheme.bgTypeNotifier.value = 'default';
-              AppTheme.updateSystemUIOverlay();
-              setState(() {});
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(LanguageService.tr('custom_bg_removed')),
-                    backgroundColor: AppTheme.surface,
-                  ),
-                );
-              }
-            },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: AppTheme.textMuted,
+              ),
+            ],
           ),
-        // 1.8 Player Theme (شكل واجهة المشغل)
-        SettingsNavigationTile(
-          icon: Icons.style_rounded,
-          title: LanguageService.tr('player_theme'),
-          subtitle: _getPlayerThemeSubtitle(),
-          onTap: () {
-            showPlayerThemeSelector(context);
+          onTap: () async {
+            await FontSizeSelectorSheet.show(context);
+            if (mounted) setState(() {});
           },
         ),
       ],
@@ -621,7 +394,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // -------------------------------------------------------------
-  // Section 2: About
+  // Section 2: Audio & Smart Features
+  // -------------------------------------------------------------
+  Widget _buildAudioAndFeaturesSection() {
+    return SettingsSection(
+      title: LanguageService().t('audio_and_features'),
+      children: [
+        // Equalizer
+        SettingsNavigationTile(
+          icon: Icons.equalizer_rounded,
+          title: LanguageService().t('equalizer_bass_title'),
+          subtitle: LanguageService().t('equalizer_bass_desc'),
+          onTap: () => EqualizerSheet.show(context),
+        ),
+        // Sleep Timer
+        SettingsNavigationTile(
+          icon: Icons.bedtime_rounded,
+          title: LanguageService().t('smart_sleep_timer'),
+          subtitle: LanguageService().t('smart_sleep_timer_sub'),
+          onTap: () => SleepTimerSheet.show(context),
+        ),
+        // Listening Insights
+        SettingsNavigationTile(
+          icon: Icons.auto_graph_rounded,
+          title: LanguageService().t('listening_insights_title'),
+          subtitle: LanguageService().t('listening_insights_subtitle'),
+          onTap: () => ListeningInsightsSheet.show(context),
+        ),
+        // Filter Short Audios (< 60 seconds)
+        SettingsSwitchTile(
+          icon: Icons.filter_alt_rounded,
+          title: LanguageService().t('ignore_short_tracks'),
+          subtitle: LanguageService().t('ignore_short_tracks_sub'),
+          value: _repo.filterShortAudios,
+          onChanged: (val) async {
+            await _repo.setFilterShortAudios(val);
+            if (mounted) setState(() {});
+          },
+        ),
+        // Default Song Sorting
+        SettingsNavigationTile(
+          icon: Icons.swap_vert_rounded,
+          title: LanguageService().t('default_song_sort'),
+          subtitle: AudioService().currentSortLabel,
+          onTap: () async {
+            await SongSortSheet.show(context);
+            if (mounted) setState(() {});
+          },
+        ),
+      ],
+    );
+  }
+
+  // -------------------------------------------------------------
+  // Section 3: About
   // -------------------------------------------------------------
   Widget _buildAboutSection() {
     final accentColor = AppTheme.accentColor;
@@ -704,12 +530,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Check for Updates Tile
         SettingsNavigationTile(
           icon: Icons.system_update_rounded,
-          title: LanguageService().isArabic
-              ? 'التحقق من التحديثات'
-              : 'Check for Updates',
-          subtitle: LanguageService().isArabic
-              ? 'البحث عن إصدارات جديدة عبر GitHub'
-              : 'Check for new releases on GitHub',
+          title: LanguageService().t('check_for_updates'),
+          subtitle: LanguageService().t('check_for_updates_sub'),
           trailing: _isCheckingUpdate
               ? SizedBox(
                   width: 18,

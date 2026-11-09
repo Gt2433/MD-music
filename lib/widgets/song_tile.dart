@@ -15,12 +15,18 @@ import '../screens/edit_song_screen.dart';
 class SongTile extends StatelessWidget {
   final SongModel song;
   final List<SongModel>? playlist;
+  final bool? isCompact;
 
   const SongTile({
     super.key,
     required this.song,
     this.playlist,
+    this.isCompact,
   });
+
+  void showSongOptions(BuildContext context, AudioService audio, bool isFav) {
+    _showSongOptions(context, audio, isFav);
+  }
 
   void _showSongOptions(BuildContext context, AudioService audio, bool isFav) {
     final editService = SongEditService();
@@ -60,7 +66,7 @@ class SongTile extends StatelessWidget {
                       QueryArtworkOrFallback(
                         id: song.id,
                         size: 68,
-                        borderRadius: 16,
+                        borderRadius: AppTheme.artworkShapeNotifier.value == 'circle' ? 34 : 16,
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -149,6 +155,52 @@ class SongTile extends StatelessWidget {
                           }
                         },
                       ),
+
+                      // Option 1.5: Play Next (التشغيل التالي)
+                      if (audio.currentSong != null && !isCurrent) ...[
+                        Divider(
+                            color: AppTheme.dividerColor,
+                            height: 1,
+                            indent: 68),
+                        _buildOptionTile(
+                          icon: Icons.playlist_play_rounded,
+                          iconColor: const Color(0xFF10B981),
+                          badgeBg: const Color(0xFF10B981).withOpacity(0.16),
+                          title: LanguageService.tr('play_next'),
+                          trailingText: audio.isNextSong(song.id)
+                              ? LanguageService.tr('play_next')
+                              : null,
+                          trailingBadgeBg: const Color(0xFF10B981).withOpacity(0.14),
+                          trailingTextColor: const Color(0xFF10B981),
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            await audio.setAsNextSong(song);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Row(
+                                    children: [
+                                      const Icon(Icons.playlist_play_rounded, color: Colors.white, size: 20),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          LanguageService.tr('will_play_next').replaceAll('{title}', displayTitle),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ],
+
                       Divider(
                           color: AppTheme.dividerColor,
                           height: 1,
@@ -547,7 +599,7 @@ class SongTile extends StatelessWidget {
 
     return RepaintBoundary(
       child: AnimatedBuilder(
-        animation: Listenable.merge([audio, editService, selection]),
+        animation: Listenable.merge([audio, editService, selection, AppTheme.listDensityNotifier, AppTheme.artworkShapeNotifier]),
         builder: (context, _) {
           final isCurrent = audio.currentSong?.id == song.id;
           final isFav = audio.isFavorite(song.id);
@@ -556,10 +608,18 @@ class SongTile extends StatelessWidget {
           final isSelectionMode = selection.isSelectionMode;
           final isSelected = selection.isSelected(song.id);
           final accent = AppTheme.accentColor;
+          final compact = isCompact ?? (AppTheme.listDensityNotifier.value == 'compact');
+          final isCircle = AppTheme.artworkShapeNotifier.value == 'circle';
+          final artSize = compact ? 50.0 : 70.0;
+          final artRadius = isCircle ? (artSize / 2) : (compact ? 13.0 : 18.0);
+          final vPadding = compact ? 4.5 : 8.0;
+          final vMargin = compact ? 2.0 : 3.5;
+          final titleFontSize = compact ? 13.5 : 15.0;
+          final artistFontSize = compact ? 11.5 : 13.0;
 
           return AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+            margin: EdgeInsets.symmetric(horizontal: 10, vertical: vMargin),
             decoration: BoxDecoration(
               color: isSelected
                   ? accent.withOpacity(0.12)
@@ -603,13 +663,13 @@ class SongTile extends StatelessWidget {
                 },
                 child: Padding(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      EdgeInsets.symmetric(horizontal: 10, vertical: vPadding),
                   child: Row(
                     children: [
                       // Cover artwork
                       Container(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
+                          borderRadius: BorderRadius.circular(artRadius),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.2),
@@ -620,8 +680,8 @@ class SongTile extends StatelessWidget {
                         ),
                         child: QueryArtworkOrFallback(
                           id: song.id,
-                          size: 72,
-                          borderRadius: 18,
+                          size: artSize,
+                          borderRadius: artRadius,
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -639,7 +699,7 @@ class SongTile extends StatelessWidget {
                                 color: isCurrent
                                     ? accent
                                     : AppTheme.textPrimary,
-                                fontSize: 15.0,
+                                fontSize: titleFontSize,
                                 fontWeight: isCurrent
                                     ? FontWeight.w800
                                     : FontWeight.w600,
@@ -656,7 +716,7 @@ class SongTile extends StatelessWidget {
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       color: AppTheme.textSecondary,
-                                      fontSize: 13.0,
+                                      fontSize: artistFontSize,
                                       fontWeight: FontWeight.w400,
                                     ),
                                   ),
@@ -1127,3 +1187,225 @@ class SongTile extends StatelessWidget {
     );
   }
 }
+
+/// بطاقة عرض الأغنية بنظام المربعات (Grid View)
+class SongGridTile extends StatelessWidget {
+  final SongModel song;
+  final List<SongModel>? playlist;
+
+  const SongGridTile({
+    super.key,
+    required this.song,
+    this.playlist,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final audio = AudioService();
+    final editService = SongEditService();
+    final selection = SongSelectionService();
+
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: Listenable.merge([audio, editService, selection, AppTheme.listDensityNotifier, AppTheme.artworkShapeNotifier]),
+        builder: (context, _) {
+          final isCurrent = audio.currentSong?.id == song.id;
+          final isFav = audio.isFavorite(song.id);
+          final title = editService.getDisplayTitle(song);
+          final artist = editService.getDisplayArtist(song);
+          final isSelectionMode = selection.isSelectionMode;
+          final isSelected = selection.isSelected(song.id);
+          final accent = AppTheme.accentColor;
+          final isCircle = AppTheme.artworkShapeNotifier.value == 'circle';
+          final gridArtRadius = isCircle ? 999.0 : 12.0;
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? accent.withOpacity(0.12)
+                  : (AppTheme.isDark ? AppTheme.cardColor : Colors.white),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected
+                    ? accent.withOpacity(0.6)
+                    : (isCurrent ? accent.withOpacity(0.5) : AppTheme.cardBorder),
+                width: isSelected || isCurrent ? 1.5 : 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () {
+                  if (isSelectionMode) {
+                    HapticFeedback.selectionClick();
+                    selection.toggleSelection(song);
+                  } else {
+                    if (isCurrent) {
+                      if (!audio.player.playing) {
+                        audio.player.play();
+                      }
+                    } else {
+                      audio.playSong(song, playlist: playlist);
+                    }
+                    if (context.mounted) {
+                      NowPlayingSheet.show(context);
+                    }
+                  }
+                },
+                onLongPress: () {
+                  HapticFeedback.mediumImpact();
+                  if (!selection.isSelectionMode) {
+                    selection.startSelection(song);
+                  } else {
+                    selection.toggleSelection(song);
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Square Artwork Container with badge overlay
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(gridArtRadius),
+                                child: QueryArtworkOrFallback(
+                                  id: song.id,
+                                  size: 150,
+                                  borderRadius: gridArtRadius,
+                                ),
+                              ),
+                            ),
+                            // Current Playing indicator
+                            if (isCurrent)
+                              Positioned(
+                                bottom: 6,
+                                right: 6,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: accent,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.35),
+                                        blurRadius: 4,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    audio.player.playing
+                                        ? Icons.equalizer_rounded
+                                        : Icons.pause_rounded,
+                                    size: 13,
+                                    color: accent.computeLuminance() > 0.4
+                                        ? Colors.black
+                                        : Colors.white,
+                                  ),
+                                ),
+                              ),
+                            // Selection checkbox badge
+                            if (isSelectionMode)
+                              Positioned(
+                                top: 6,
+                                left: 6,
+                                child: Container(
+                                  width: 26,
+                                  height: 26,
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? accent : Colors.black54,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: isSelected
+                                      ? Center(
+                                          child: Text(
+                                            '${selection.getSelectionOrder(song.id)}',
+                                            style: TextStyle(
+                                              color: accent.computeLuminance() > 0.4
+                                                  ? Colors.black
+                                                  : Colors.white,
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+
+                      // Title
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isCurrent ? accent : AppTheme.textPrimary,
+                          fontSize: 13.0,
+                          fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+
+                      // Artist & Options
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              artist,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 11.0,
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              final tile = SongTile(song: song, playlist: playlist);
+                              tile.showSongOptions(context, audio, isFav);
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 4, right: 2),
+                              child: Icon(
+                                Icons.more_vert_rounded,
+                                size: 17,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+

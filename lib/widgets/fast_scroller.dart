@@ -39,15 +39,22 @@ class _FastScrollerState extends State<FastScroller> {
     super.dispose();
   }
 
+  bool get _hasSinglePosition =>
+      widget.controller.hasClients && widget.controller.positions.length == 1;
+
+  ScrollPosition? get _position =>
+      _hasSinglePosition ? widget.controller.position : null;
+
   void _onScroll() {
-    if (!mounted || !widget.controller.hasClients) return;
-    final maxScroll = widget.controller.position.maxScrollExtent;
+    if (!mounted || !_hasSinglePosition) return;
+    final pos = _position!;
+    final maxScroll = pos.maxScrollExtent;
     if (maxScroll <= 120) {
       if (_isVisible) setState(() => _isVisible = false);
       return;
     }
 
-    final progress = (widget.controller.offset / maxScroll).clamp(0.0, 1.0);
+    final progress = (pos.pixels / maxScroll).clamp(0.0, 1.0);
     setState(() {
       _scrollProgress = progress;
       _isVisible = true;
@@ -70,8 +77,8 @@ class _FastScrollerState extends State<FastScroller> {
   }
 
   void _handleDrag(double localY, double trackHeight) {
-    if (!widget.controller.hasClients) return;
-    final maxScroll = widget.controller.position.maxScrollExtent;
+    if (!_hasSinglePosition) return;
+    final maxScroll = _position!.maxScrollExtent;
     if (maxScroll <= 0 || trackHeight <= 0) return;
 
     final fraction = (localY / trackHeight).clamp(0.0, 1.0);
@@ -122,8 +129,8 @@ class _FastScrollerState extends State<FastScroller> {
             widget.child,
 
             // ماسك النقل السريع - يتبع حركة الإصبع بدقة 1:1 بدون قفز
-            if (widget.controller.hasClients &&
-                widget.controller.position.maxScrollExtent > 150)
+            if (_hasSinglePosition &&
+                _position!.maxScrollExtent > 150)
               Positioned(
                 top: thumbTop,
                 left: placeOnLeft ? 2 : null,
